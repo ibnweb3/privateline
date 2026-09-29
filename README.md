@@ -51,6 +51,11 @@ It builds `daml/privateline` and `daml/privateline-test` and runs the 15 Daml Sc
 `scripts/dev/vendor-dars.sh` refreshes the prebuilt DARs in `daml/dars/` from a
 Decentralization Manager clone.
 
+## License
+
+[Apache-2.0](LICENSE). The prebuilt DARs in `daml/dars/` come from DLC-Link and Digital Asset under
+the same license.
+
 ## Development environment (Windows 11 + WSL2 + Docker Desktop)
 
 - `C:\Users\<you>\.wslconfig` gives WSL 12 GB (BitSafe's LocalNet needs 12 GB for Docker).
