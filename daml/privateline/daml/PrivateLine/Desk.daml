@@ -1,0 +1,137 @@
+-- | The desk's side: signed quotes, fills, net settlement with the vault, and the demo faucet.
+--
+-- On LocalNet the desk is also the issuer of the demo tokens. It mirrors live Cantex prices, and
+-- mints and redeems mirror tokens when it settles with the vault. On Canton MainNet the same fills
+-- would settle as swaps on Cantex.
+module PrivateLine.Desk where
+
+import DA.Action (foldlA)
+import DA.Foldable (forA_)
+import qualified DA.Map as Map
+
+import PrivateLine.Holding
+import PrivateLine.Types
+
+-- | A price the desk stands behind until `validUntil`: the vault buys at `ask` and sells at `bid`.
+-- Filling does not consume the quote, so many users can trade on it at the same time.
+template Quote
+  with
+    desk : Party
+    vault : Party
+    symbol : Text
+    bid : Decimal
+      -- ^ Dollars per unit the desk pays when a user sells.
+    ask : Decimal
+      -- ^ Dollars per unit the desk charges when a user buys.
+    source : Text
+      -- ^ Where the price came from, e.g. "cantex SPYe/CC x CC/USDCx".
+    quotedAt : Time
+    validUntil : Time
+  where
+    signatory desk
+    observer vault
+    ensure bid > 0.0 && ask >= bid && validUntil > quotedAt && symbol /= dollar
+
+    -- | Fill one user's trade at this quote. Only the vault can call it, from inside a trade that
+    -- 2 of 3 operators approved; the desk agreed to it by signing the quote.
+    nonconsuming choice Quote_Fill : (ContractId Fill, Fill)
+      with
+        side : Side
+        amount : TradeAmount
+        tradeRef : Text
+      controller vault
+      do
+        now <- getTime
+        assertMsg ("quote expired at " <> show validUntil) (now <= validUntil)
+        let price = if side == Buy then ask else bid
+            (units, dollars) = case amount of
+              Dollars d -> (d / price, d)
+              Units u -> (u, u * price)
+        assertMsg "trade amount too small" (units > 0.0 && dollars > 0.0)
+        let fill = Fill with desk; vault; symbol; side; units; price; dollars; tradeRef; filledAt = now
+        fillCid <- create fill
+        pure (fillCid, fill)
+
+-- | A trade that the desk and the vault both signed, waiting for the next net settlement. It names
+-- no user: the desk sees trade sizes, never who traded.
+template Fill
+  with
+    desk : Party
+    vault : Party
+    symbol : Text
+    side : Side
+    units : Decimal
+    price : Decimal
+    dollars : Decimal
+    tradeRef : Text
+    filledAt : Time
+  where
+    signatory desk, vault
+
+-- | The desk's standing agreement to settle fills with the vault, signed once by the desk. Each
+-- settlement still needs 2 of 3 vault operators, because only the vault can exercise it.
+template DeskAgreement
+  with
+    desk : Party
+    vault : Party
+  where
+    signatory desk
+    observer vault
+
+    -- | Settle a batch of fills in one transaction. Fills are netted per symbol: the vault burns
+    -- what it owes the desk out of `vaultHoldings` and keeps the change, and the desk mints what
+    -- it owes the vault.
+    nonconsuming choice DeskAgreement_Settle : [ContractId DemoHolding]
+      with
+        fills : [ContractId Fill]
+        vaultHoldings : [ContractId DemoHolding]
+      controller vault
+      do
+        assertMsg "no fills to settle" (not (null fills))
+        nets <- foldlA (\acc fillCid -> do
+            fill <- fetch fillCid
+            assertMsg "fill belongs to another desk or vault" (fill.desk == desk && fill.vault == vault)
+            archive fillCid
+            pure $ case fill.side of
+              Buy -> adjust fill.symbol fill.units (adjust dollar (negate fill.dollars) acc)
+              Sell -> adjust fill.symbol (negate fill.units) (adjust dollar fill.dollars acc)
+          ) Map.empty fills
+        held <- forA vaultHoldings (\cid -> do
+            holding <- fetch cid
+            assertMsg "holding belongs to another desk or vault" (holding.issuer == desk && holding.owner == vault)
+            pure (cid, holding))
+        fmap concat $ forA (Map.toList nets) $ \(symbol, net) ->
+          if net > 0.0 then do
+            cid <- create DemoHolding with issuer = desk; owner = vault; symbol; amount = net
+            pure [cid]
+          else do
+            let owed = negate net
+                inputs = filter (\(_, holding) -> holding.symbol == symbol) held
+                available = sum (map (\(_, holding) -> holding.amount) inputs)
+            assertMsg ("vault holds " <> show available <> " " <> symbol <> ", settlement needs " <> show owed)
+              (available >= owed)
+            forA_ inputs (\(cid, _) -> archive cid)
+            if available > owed then do
+              cid <- create DemoHolding with issuer = desk; owner = vault; symbol; amount = available - owed
+              pure [cid]
+            else pure []
+
+-- | LocalNet only: demo dollars for new and topped-up accounts, standing in for stablecoin
+-- deposits from outside. Signed once by the desk; each mint is capped and needs 2 of 3 operators.
+template DemoFaucet
+  with
+    desk : Party
+    vault : Party
+    maxPerMint : Decimal
+  where
+    signatory desk
+    observer vault
+    ensure maxPerMint > 0.0
+
+    nonconsuming choice DemoFaucet_Mint : ContractId DemoHolding
+      with
+        amount : Decimal
+      controller vault
+      do
+        assertMsg ("the faucet mints at most $" <> show maxPerMint) (amount > 0.0 && amount <= maxPerMint)
+        create DemoHolding with issuer = desk; owner = vault; symbol = dollar; amount

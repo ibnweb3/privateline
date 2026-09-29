@@ -1,0 +1,150 @@
+-- | Everything that moves user funds is a governed action. The SMS operator proposes it, and it
+-- runs only after 2 of the vault's 3 operators confirm it through BitSafe's Decentralization
+-- Manager (`GovernanceRules_ConfirmAction`, then `GovernanceRules_ExecuteConfirmedAction`).
+-- `executeImpl` runs with the vault's authority, and every check in it runs again at execution
+-- time, after the approvals.
+module PrivateLine.Actions where
+
+import DA.Action (void, when)
+import DA.Date (toDateUTC)
+import qualified DA.Map as Map
+
+import Governance.Action
+
+import PrivateLine.Account
+import PrivateLine.Desk
+import PrivateLine.Holding
+import PrivateLine.Types
+
+-- | Open a private account for a new user, optionally funded with demo dollars.
+template OpenAccountProposal
+  with
+    vault : Party
+    proposer : Party
+    faucetCid : ContractId DemoFaucet
+    user : Party
+    accountId : Text
+    phoneTag : Text
+    dailyLimit : Decimal
+    startingDollars : Decimal
+      -- ^ LocalNet demo funding; 0.0 for none.
+  where
+    signatory proposer
+    observer vault
+    ensure dailyLimit > 0.0 && startingDollars >= 0.0
+
+    interface instance GovernableAction for OpenAccountProposal where
+      view = GovernableActionView with
+        governanceParty = vault
+        proposer
+        actionLabel = "PrivateLineOpenAccount"
+        description = "Open account " <> accountId <> ": daily limit $" <> show dailyLimit
+          <> ", starting balance $" <> show startingDollars <> " (demo dollars)"
+
+      executeImpl = do
+        today <- toDateUTC <$> getTime
+        when (startingDollars > 0.0) $
+          void $ exercise faucetCid DemoFaucet_Mint with amount = startingDollars
+        void $ create Account with
+          vault
+          user
+          accountId
+          phoneTag
+          balances = if startingDollars > 0.0 then Map.fromList [(dollar, startingDollars)] else Map.empty
+          dailyLimit
+          spentToday = 0.0
+          spentOn = today
+
+-- | Add demo dollars to a user's account (LocalNet stand-in for a stablecoin deposit).
+template DepositProposal
+  with
+    vault : Party
+    proposer : Party
+    faucetCid : ContractId DemoFaucet
+    accountCid : ContractId Account
+    accountId : Text
+    amount : Decimal
+  where
+    signatory proposer
+    observer vault
+    ensure amount > 0.0
+
+    interface instance GovernableAction for DepositProposal where
+      view = GovernableActionView with
+        governanceParty = vault
+        proposer
+        actionLabel = "PrivateLineDeposit"
+        description = "Deposit $" <> show amount <> " (demo dollars) to account " <> accountId
+
+      executeImpl = do
+        account <- fetch accountCid
+        assertMsg "account does not match" (account.accountId == accountId && account.vault == vault)
+        void $ exercise faucetCid DemoFaucet_Mint with amount
+        void $ exercise accountCid Account_Credit with symbol = dollar; amount
+
+-- | Buy or sell for one user at the desk's quote. It runs only if, at execution time, the quote is
+-- still valid, the price is no worse than the one the user confirmed by SMS, and the trade fits
+-- the user's balance and daily limit.
+template TradeProposal
+  with
+    vault : Party
+    proposer : Party
+    accountCid : ContractId Account
+    accountId : Text
+    quoteCid : ContractId Quote
+    symbol : Text
+    side : Side
+    amount : TradeAmount
+    limitPrice : Decimal
+      -- ^ Worst price per unit the user accepted: the most they pay (Buy) or the least they get (Sell).
+    tradeRef : Text
+      -- ^ Reference shown in the user's SMS, e.g. "T7K2".
+  where
+    signatory proposer
+    observer vault
+    ensure limitPrice > 0.0 && isPositive amount && symbol /= dollar
+
+    interface instance GovernableAction for TradeProposal where
+      view = GovernableActionView with
+        governanceParty = vault
+        proposer
+        actionLabel = "PrivateLineTrade"
+        description = tradeRef <> ": " <> (if side == Buy then "buy " else "sell ")
+          <> describeAmount symbol amount
+          <> (if side == Buy then ", paying at most $" else ", receiving at least $") <> show limitPrice
+          <> " per unit, account " <> accountId
+
+      executeImpl = do
+        account <- fetch accountCid
+        quote <- fetch quoteCid
+        assertMsg "account does not match" (account.accountId == accountId && account.vault == vault)
+        assertMsg "quote is for another symbol or vault" (quote.symbol == symbol && quote.vault == vault)
+        let price = if side == Buy then quote.ask else quote.bid
+        assertMsg ("price moved to $" <> show price <> ", past the user's limit of $" <> show limitPrice)
+          (if side == Buy then price <= limitPrice else price >= limitPrice)
+        (_, fill) <- exercise quoteCid Quote_Fill with side; amount; tradeRef
+        void $ exercise accountCid Account_Trade with symbol; side; units = fill.units; dollars = fill.dollars
+
+-- | Settle a batch of fills with the desk, netted per symbol (see `DeskAgreement_Settle`).
+template SettleProposal
+  with
+    vault : Party
+    proposer : Party
+    deskAgreementCid : ContractId DeskAgreement
+    fills : [ContractId Fill]
+    vaultHoldings : [ContractId DemoHolding]
+    batchRef : Text
+  where
+    signatory proposer
+    observer vault
+    ensure not (null fills)
+
+    interface instance GovernableAction for SettleProposal where
+      view = GovernableActionView with
+        governanceParty = vault
+        proposer
+        actionLabel = "PrivateLineSettle"
+        description = batchRef <> ": settle " <> show (length fills) <> " fills with the desk"
+
+      executeImpl =
+        void $ exercise deskAgreementCid DeskAgreement_Settle with fills; vaultHoldings

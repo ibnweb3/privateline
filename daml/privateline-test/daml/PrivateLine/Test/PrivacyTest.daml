@@ -1,0 +1,75 @@
+-- | Who can see what. Each check queries the ledger as one party and asserts what that party can
+-- and cannot see.
+module PrivateLine.Test.PrivacyTest where
+
+import DA.Assert ((===))
+import DA.List (sort)
+import Daml.Script
+
+import Governance.ExecutionResult (GovernanceExecutionResult)
+
+import PrivateLine.Account
+import PrivateLine.Actions
+import PrivateLine.Desk
+import PrivateLine.Types
+
+import PrivateLine.Test.Setup
+
+-- | Alice and Bob each see their own account and nothing of each other's: no account, no trade,
+-- no fill and no approval record.
+test_users_see_only_their_own_account : Script ()
+test_users_see_only_their_own_account = do
+  w <- setup
+  _ <- openAccount w w.alice "alice-1" 500.0 100.0
+  bobAccount <- openAccount w w.bob "bob-1" 500.0 100.0
+  quoteCid <- postQuote w "SPYe" 599.0 600.0
+  aliceAccount <- trade w w.alice "alice-1" quoteCid "SPYe" Buy (Dollars 30.0) 601.0
+
+  bobsAccounts <- query @Account w.bob
+  map fst bobsAccounts === [bobAccount]
+  bobLooksUpAlice <- queryContractId w.bob aliceAccount
+  bobLooksUpAlice === None
+  bobsTrades <- query @TradeProposal w.bob
+  bobsTrades === []
+  bobsFills <- query @Fill w.bob
+  bobsFills === []
+  bobsAudit <- query @GovernanceExecutionResult w.bob
+  bobsAudit === []
+
+  alicesAccounts <- query @Account w.alice
+  map fst alicesAccounts === [aliceAccount]
+  alicesFills <- query @Fill w.alice
+  alicesFills === []
+
+-- | The desk fills trades but never learns who traded: it sees no accounts, no trade proposals and
+-- no approval records, and its fills name no user.
+test_desk_sees_trade_sizes_not_users : Script ()
+test_desk_sees_trade_sizes_not_users = do
+  w <- setup
+  _ <- openAccount w w.alice "alice-1" 500.0 100.0
+  quoteCid <- postQuote w "SPYe" 599.0 600.0
+  _ <- trade w w.alice "alice-1" quoteCid "SPYe" Buy (Dollars 30.0) 601.0
+
+  desksAccounts <- query @Account w.desk
+  desksAccounts === []
+  desksTrades <- query @TradeProposal w.desk
+  desksTrades === []
+  desksAudit <- query @GovernanceExecutionResult w.desk
+  desksAudit === []
+  fills <- query @Fill w.desk
+  map (\(_, fill) -> (fill.desk, fill.vault, fill.units, fill.dollars)) fills
+    === [(w.desk, w.vault, 0.05, 30.0)]
+
+-- | The approval record the operators keep names the account id and the trade, and nobody
+-- outside the vault can read it.
+test_audit_trail_stays_inside_the_vault : Script ()
+test_audit_trail_stays_inside_the_vault = do
+  w <- setup
+  _ <- openAccount w w.alice "alice-1" 500.0 100.0
+  quoteCid <- postQuote w "SPYe" 599.0 600.0
+  _ <- trade w w.alice "alice-1" quoteCid "SPYe" Buy (Dollars 30.0) 601.0
+
+  records <- query @GovernanceExecutionResult w.vault
+  sort (map (\(_, record) -> record.actionLabel) records) === ["PrivateLineOpenAccount", "PrivateLineTrade"]
+  alicesAudit <- query @GovernanceExecutionResult w.alice
+  alicesAudit === []

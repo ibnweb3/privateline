@@ -1,0 +1,177 @@
+-- | Shared fixture for PrivateLine's tests: a vault run by 3 operators with threshold 2, a desk,
+-- and two users. The vault uses the same `GovernanceRules` contract that BitSafe's
+-- Decentralization Manager deploys on LocalNet; `confirm` and `tryExecute` are what DecMan's
+-- /governance/confirm and /governance/execute submit.
+module PrivateLine.Test.Setup where
+
+import DA.Action (unless)
+import DA.Map (Map)
+import qualified DA.Set as Set
+import DA.Text (isInfixOf)
+import DA.Time (addRelTime, minutes, seconds)
+import Daml.Script
+
+import Governance.Action (GovernableAction)
+import Governance.Confirmation (GovernanceConfirmation)
+import Governance.ExecutionResult (ExecuteConfirmedActionResult(..))
+import Governance.Rules
+
+import PrivateLine.Account
+import PrivateLine.Actions
+import PrivateLine.Desk
+import PrivateLine.Types
+
+data World = World
+  with
+    vault : Party
+      -- ^ The decentralized party: holds the tokens and signs every account.
+    operator : Party
+      -- ^ Member 1: runs the SMS service and proposes every action.
+    priceChecker : Party
+      -- ^ Member 2: independent price and limit checker.
+    riskChecker : Party
+      -- ^ Member 3: independent risk checker.
+    desk : Party
+    alice : Party
+    bob : Party
+    rulesCid : ContractId GovernanceRules
+    faucetCid : ContractId DemoFaucet
+    deskAgreementCid : ContractId DeskAgreement
+  deriving (Eq, Show)
+
+setup : Script World
+setup = do
+  vault <- allocateParty "Vault"
+  operator <- allocateParty "Operator"
+  priceChecker <- allocateParty "PriceChecker"
+  riskChecker <- allocateParty "RiskChecker"
+  desk <- allocateParty "Desk"
+  alice <- allocateParty "Alice"
+  bob <- allocateParty "Bob"
+  rulesCid <- submit vault $ createCmd GovernanceRules with
+    governanceParty = vault
+    members = Set.fromList [operator, priceChecker, riskChecker]
+    threshold = 2
+    actionConfirmationTimeout = minutes 5
+    additionalProposers = None
+  faucetCid <- submit desk $ createCmd DemoFaucet with desk; vault; maxPerMint = 1000.0
+  deskAgreementCid <- submit desk $ createCmd DeskAgreement with desk; vault
+  pure World with ..
+
+-- ============================================================================
+-- Approvals
+-- ============================================================================
+
+-- | A member confirms a proposal. Members host the vault party, so they read as the vault.
+confirm : World -> ContractId GovernableAction -> Party -> Script (ContractId GovernanceConfirmation)
+confirm w proposal confirmer = do
+  result <- submit (actAs confirmer <> readAs w.vault) $
+    exerciseCmd w.rulesCid GovernanceRules_ConfirmAction with
+      confirmer
+      actionProposalCid = proposal
+  pure result.confirmationCid
+
+-- | A member tries to execute a proposal with the given confirmations.
+tryExecute : World -> ContractId GovernableAction -> Party -> [ContractId GovernanceConfirmation]
+  -> Script (Either SubmitError ExecuteConfirmedActionResult)
+tryExecute w proposal executor confirmations =
+  trySubmit (actAs executor <> readAs w.vault) $
+    exerciseCmd w.rulesCid GovernanceRules_ExecuteConfirmedAction with
+      executor
+      actionProposalCid = proposal
+      confirmations
+
+-- | The normal path: the operator (who proposed) and the price checker confirm, and the operator
+-- executes. The proposer's own confirmation counts toward the threshold.
+approve : World -> ContractId GovernableAction -> Script ExecuteConfirmedActionResult
+approve w proposal = do
+  confirmations <- forA [w.operator, w.priceChecker] (confirm w proposal)
+  tryExecute w proposal w.operator confirmations >>= either (\err -> abort ("execution failed: " <> show err)) pure
+
+-- | Approve a proposal 2 of 3 and check that execution fails with an error mentioning `expected`.
+approveMustFail : World -> ContractId GovernableAction -> Text -> Script ()
+approveMustFail w proposal expected = do
+  confirmations <- forA [w.operator, w.priceChecker] (confirm w proposal)
+  tryExecute w proposal w.operator confirmations >>= expectFailure expected
+
+-- | Check that a submission failed with an error mentioning `expected`.
+expectFailure : Text -> Either SubmitError a -> Script ()
+expectFailure expected result = case result of
+  Right _ -> abort ("expected a failure mentioning: " <> expected)
+  Left err -> do
+    debug ("failed as expected: " <> show err)
+    unless (expected `isInfixOf` show err) $
+      abort ("expected a failure mentioning '" <> expected <> "', got: " <> show err)
+
+-- ============================================================================
+-- Accounts, quotes and trades
+-- ============================================================================
+
+-- | The operator opens an account for `user`, approved 2 of 3.
+openAccount : World -> Party -> Text -> Decimal -> Decimal -> Script (ContractId Account)
+openAccount w user accountId dailyLimit startingDollars = do
+  proposal <- submit w.operator $ createCmd OpenAccountProposal with
+    vault = w.vault
+    proposer = w.operator
+    faucetCid = w.faucetCid
+    user
+    accountId
+    phoneTag = "tag-" <> accountId
+    dailyLimit
+    startingDollars
+  _ <- approve w (toInterfaceContractId proposal)
+  findAccount user accountId
+
+-- | Look up an account by id, as `party` sees it.
+findAccount : Party -> Text -> Script (ContractId Account)
+findAccount party accountId = do
+  accounts <- query @Account party
+  case filter (\(_, account) -> account.accountId == accountId) accounts of
+    [(cid, _)] -> pure cid
+    found -> abort ("expected one account " <> accountId <> ", found " <> show (length found))
+
+-- | Balances of an account, as `party` sees it.
+balancesOf : Party -> ContractId Account -> Script (Map Text Decimal)
+balancesOf party cid = do
+  Some account <- queryContractId party cid
+  pure account.balances
+
+-- | The desk posts a quote that is valid for 30 seconds.
+postQuote : World -> Text -> Decimal -> Decimal -> Script (ContractId Quote)
+postQuote w symbol bid ask = do
+  now <- getTime
+  submit w.desk $ createCmd Quote with
+    desk = w.desk
+    vault = w.vault
+    symbol
+    bid
+    ask
+    source = "test"
+    quotedAt = now
+    validUntil = now `addRelTime` seconds 30
+
+-- | The operator proposes a trade the user confirmed by SMS.
+proposeTrade : World -> ContractId Account -> Text -> ContractId Quote -> Text -> Side -> TradeAmount -> Decimal
+  -> Script (ContractId GovernableAction)
+proposeTrade w accountCid accountId quoteCid symbol side amount limitPrice = do
+  proposal <- submit w.operator $ createCmd TradeProposal with
+    vault = w.vault
+    proposer = w.operator
+    accountCid
+    accountId
+    quoteCid
+    symbol
+    side
+    amount
+    limitPrice
+    tradeRef = "T-" <> accountId
+  pure (toInterfaceContractId proposal)
+
+-- | Propose a trade for `user`'s account and approve it 2 of 3. Returns the updated account.
+trade : World -> Party -> Text -> ContractId Quote -> Text -> Side -> TradeAmount -> Decimal
+  -> Script (ContractId Account)
+trade w user accountId quoteCid symbol side amount limitPrice = do
+  accountCid <- findAccount user accountId
+  proposal <- proposeTrade w accountCid accountId quoteCid symbol side amount limitPrice
+  _ <- approve w proposal
+  findAccount user accountId

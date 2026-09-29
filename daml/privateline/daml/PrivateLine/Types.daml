@@ -1,0 +1,36 @@
+-- | Types and helpers shared by PrivateLine's contracts.
+module PrivateLine.Types where
+
+import DA.Map (Map)
+import qualified DA.Map as Map
+import DA.Optional (fromOptional)
+
+-- | Which way a user trades.
+data Side = Buy | Sell
+  deriving (Eq, Show)
+
+-- | How much to trade: a dollar amount ("BUY GOLD 20") or a number of units ("SELL GOLD ALL").
+data TradeAmount
+  = Dollars Decimal
+  | Units Decimal
+  deriving (Eq, Show)
+
+-- | Symbol of the demo dollar that accounts hold. It stands in for a dollar stablecoin
+-- (USDCx on Canton MainNet).
+dollar : Text
+dollar = "USD"
+
+isPositive : TradeAmount -> Bool
+isPositive (Dollars d) = d > 0.0
+isPositive (Units u) = u > 0.0
+
+-- | Add `delta` to the balance of `symbol`, dropping the entry when it reaches zero.
+adjust : Text -> Decimal -> Map Text Decimal -> Map Text Decimal
+adjust symbol delta balances =
+  let new = fromOptional 0.0 (Map.lookup symbol balances) + delta
+  in if new == 0.0 then Map.delete symbol balances else Map.insert symbol new balances
+
+-- | Text for approval screens and the audit trail, e.g. "$20.0 of SPYe" or "1.5 SPYe".
+describeAmount : Text -> TradeAmount -> Text
+describeAmount symbol (Dollars d) = "$" <> show d <> " of " <> symbol
+describeAmount symbol (Units u) = show u <> " " <> symbol

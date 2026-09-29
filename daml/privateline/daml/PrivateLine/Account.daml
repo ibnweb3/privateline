@@ -1,0 +1,65 @@
+-- | Each user's private account at the vault.
+module PrivateLine.Account where
+
+import DA.Date (toDateUTC)
+import DA.Map (Map)
+import qualified DA.Map as Map
+import DA.Optional (fromOptional)
+
+import PrivateLine.Types
+
+-- | One user's account. Only the vault (its 3 operators) and the user can see it: other users
+-- cannot, and neither can the desk. It holds no phone number or email. `phoneTag` is an opaque tag
+-- the SMS operator derives from the phone number with a secret key, so the operators can see that
+-- a phone changed without learning the number.
+template Account
+  with
+    vault : Party
+    user : Party
+    accountId : Text
+      -- ^ Short id used in SMS replies and on the operators' approval screens.
+    phoneTag : Text
+    balances : Map Text Decimal
+      -- ^ Units held for the user per symbol; dollars under `dollar`.
+    dailyLimit : Decimal
+      -- ^ Most dollars the user can trade per UTC day.
+    spentToday : Decimal
+    spentOn : Date
+  where
+    signatory vault
+    observer user
+    ensure dailyLimit > 0.0 && spentToday >= 0.0 && all (> 0.0) (Map.values balances)
+
+    -- | Add funds, e.g. a deposit.
+    choice Account_Credit : ContractId Account
+      with
+        symbol : Text
+        amount : Decimal
+      controller vault
+      do
+        assertMsg "credit must be positive" (amount > 0.0)
+        create this with balances = adjust symbol amount balances
+
+    -- | Apply a filled trade and count it against today's limit.
+    choice Account_Trade : ContractId Account
+      with
+        symbol : Text
+        side : Side
+        units : Decimal
+        dollars : Decimal
+      controller vault
+      do
+        today <- toDateUTC <$> getTime
+        let spent = (if today == spentOn then spentToday else 0.0) + dollars
+        assertMsg ("over the daily limit: $" <> show spent <> " of $" <> show dailyLimit) (spent <= dailyLimit)
+        newBalances <- case side of
+          Buy -> adjust symbol units <$> debit dollar dollars balances
+          Sell -> adjust dollar dollars <$> debit symbol units balances
+        create this with balances = newBalances; spentToday = spent; spentOn = today
+
+-- | Take `amount` of `symbol` out of `balances`, failing if the user doesn't have it.
+debit : Text -> Decimal -> Map Text Decimal -> Update (Map Text Decimal)
+debit symbol amount balances = do
+  let have = fromOptional 0.0 (Map.lookup symbol balances)
+  assertMsg ("not enough " <> symbol <> ": has " <> show have <> ", needs " <> show amount) (have >= amount)
+  pure (adjust symbol (negate amount) balances)

@@ -1,0 +1,28 @@
+-- | Demo tokens for LocalNet, readable through the CIP-56 token standard.
+module PrivateLine.Holding where
+
+import qualified DA.TextMap as TextMap
+import Splice.Api.Token.HoldingV1 (Holding, HoldingView(..), InstrumentId(..))
+import Splice.Api.Token.MetadataV1 (Metadata(..))
+
+-- | A LocalNet stand-in for a token that trades on Canton MainNet (SPYe, QQQe, eXAU, eXAG, cBTC,
+-- cETH) or for a dollar stablecoin. The demo desk issues it and the vault holds it. Both sign, so
+-- neither can create or destroy the vault's tokens alone. It implements the CIP-56 `Holding`
+-- interface, so token-standard wallets and tools can read it, and its metadata marks it as a demo.
+template DemoHolding
+  with
+    issuer : Party
+    owner : Party
+    symbol : Text
+    amount : Decimal
+  where
+    signatory issuer, owner
+    ensure amount > 0.0
+
+    interface instance Holding for DemoHolding where
+      view = HoldingView with
+        owner
+        instrumentId = InstrumentId with admin = issuer; id = symbol
+        amount
+        lock = None
+        meta = Metadata with values = TextMap.fromList [("privateline/demo", "LocalNet mirror token, no real asset")]

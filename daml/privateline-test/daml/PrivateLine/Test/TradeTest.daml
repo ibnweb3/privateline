@@ -1,0 +1,128 @@
+-- | Trades, limits and the 2-of-3 rule.
+module PrivateLine.Test.TradeTest where
+
+import DA.Assert ((===))
+import qualified DA.Map as Map
+import DA.Time (days, seconds)
+import Daml.Script
+
+import PrivateLine.Actions
+import PrivateLine.Desk
+import PrivateLine.Types
+
+import PrivateLine.Test.Setup
+
+-- | One operator alone cannot move funds. Opening a funded account with only the proposer's
+-- confirmation fails; a second operator's confirmation (here the risk checker) lets it run.
+test_one_operator_alone_cannot_act : Script ()
+test_one_operator_alone_cannot_act = do
+  w <- setup
+  proposal <- submit w.operator $ createCmd OpenAccountProposal with
+    vault = w.vault
+    proposer = w.operator
+    faucetCid = w.faucetCid
+    user = w.alice
+    accountId = "a1"
+    phoneTag = "tag-a1"
+    dailyLimit = 500.0
+    startingDollars = 100.0
+  let action = toInterfaceContractId proposal
+  own <- confirm w action w.operator
+  tryExecute w action w.operator [own] >>= expectFailure "Enough confirmations"
+  second <- confirm w action w.riskChecker
+  _ <- tryExecute w action w.operator [own, second] >>= either (\err -> abort (show err)) pure
+  accountCid <- findAccount w.alice "a1"
+  balances <- balancesOf w.alice accountCid
+  balances === Map.fromList [(dollar, 100.0)]
+
+-- | "BUY SPY 30": $30 buys 0.05 SPYe at the $600 ask, and the desk records a fill.
+test_buy_by_dollars : Script ()
+test_buy_by_dollars = do
+  w <- setup
+  _ <- openAccount w w.alice "a1" 500.0 100.0
+  quoteCid <- postQuote w "SPYe" 599.0 600.0
+  accountCid <- trade w w.alice "a1" quoteCid "SPYe" Buy (Dollars 30.0) 601.0
+  balances <- balancesOf w.alice accountCid
+  balances === Map.fromList [(dollar, 70.0), ("SPYe", 0.05)]
+  fills <- query @Fill w.desk
+  map (\(_, fill) -> (fill.symbol, fill.side, fill.units, fill.price, fill.dollars)) fills
+    === [("SPYe", Buy, 0.05, 600.0, 30.0)]
+
+-- | "SELL GOLD ALL": selling units at the bid credits the dollars and empties the position.
+test_sell_units : Script ()
+test_sell_units = do
+  w <- setup
+  _ <- openAccount w w.alice "a1" 500.0 100.0
+  before <- postQuote w "eXAU" 2600.0 2650.0
+  _ <- trade w w.alice "a1" before "eXAU" Buy (Dollars 53.0) 2650.0
+  later <- postQuote w "eXAU" 2700.0 2710.0
+  accountCid <- trade w w.alice "a1" later "eXAU" Sell (Units 0.02) 2690.0
+  balances <- balancesOf w.alice accountCid
+  balances === Map.fromList [(dollar, 101.0)]
+
+-- | The daily limit blocks a trade that would pass it, and resets the next UTC day.
+test_daily_limit_blocks_then_resets : Script ()
+test_daily_limit_blocks_then_resets = do
+  w <- setup
+  _ <- openAccount w w.alice "a1" 50.0 100.0
+  today <- postQuote w "SPYe" 599.0 600.0
+  accountCid <- trade w w.alice "a1" today "SPYe" Buy (Dollars 30.0) 601.0
+  overLimit <- proposeTrade w accountCid "a1" today "SPYe" Buy (Dollars 30.0) 601.0
+  approveMustFail w overLimit "over the daily limit"
+  passTime (days 1)
+  tomorrow <- postQuote w "SPYe" 599.0 600.0
+  nextDay <- trade w w.alice "a1" tomorrow "SPYe" Buy (Dollars 30.0) 601.0
+  balances <- balancesOf w.alice nextDay
+  balances === Map.fromList [(dollar, 40.0), ("SPYe", 0.1)]
+
+-- | A trade approved after its quote expired does not run.
+test_expired_quote_blocks_trade : Script ()
+test_expired_quote_blocks_trade = do
+  w <- setup
+  accountCid <- openAccount w w.alice "a1" 500.0 100.0
+  quoteCid <- postQuote w "SPYe" 599.0 600.0
+  proposal <- proposeTrade w accountCid "a1" quoteCid "SPYe" Buy (Dollars 30.0) 601.0
+  passTime (seconds 60)
+  approveMustFail w proposal "quote expired"
+
+-- | The user confirmed "at most $601" by SMS. Even with a fresh quote, the operator cannot fill
+-- them at $612.
+test_worse_price_than_confirmed_is_blocked : Script ()
+test_worse_price_than_confirmed_is_blocked = do
+  w <- setup
+  accountCid <- openAccount w w.alice "a1" 500.0 100.0
+  higher <- postQuote w "SPYe" 610.0 612.0
+  proposal <- proposeTrade w accountCid "a1" higher "SPYe" Buy (Dollars 30.0) 601.0
+  approveMustFail w proposal "price moved"
+
+-- | A user cannot spend more dollars than the account holds.
+test_cannot_spend_more_than_balance : Script ()
+test_cannot_spend_more_than_balance = do
+  w <- setup
+  accountCid <- openAccount w w.alice "a1" 500.0 100.0
+  quoteCid <- postQuote w "SPYe" 599.0 600.0
+  proposal <- proposeTrade w accountCid "a1" quoteCid "SPYe" Buy (Dollars 150.0) 601.0
+  approveMustFail w proposal "not enough USD"
+
+-- | Only the vault can fill a quote, so the desk cannot book a trade by itself.
+test_desk_cannot_fill_its_own_quote : Script ()
+test_desk_cannot_fill_its_own_quote = do
+  w <- setup
+  quoteCid <- postQuote w "SPYe" 599.0 600.0
+  submitMustFail w.desk $ exerciseCmd quoteCid Quote_Fill with
+    side = Buy
+    amount = Dollars 30.0
+    tradeRef = "x"
+
+-- | Contract ids in a proposal are resolved at execution. A second trade proposed against the same
+-- account version fails once the first one has changed the account, instead of acting on stale
+-- balances. This is why the SMS service keeps one pending action per account.
+test_stale_account_fails_safely : Script ()
+test_stale_account_fails_safely = do
+  w <- setup
+  accountCid <- openAccount w w.alice "a1" 500.0 100.0
+  quoteCid <- postQuote w "SPYe" 599.0 600.0
+  first <- proposeTrade w accountCid "a1" quoteCid "SPYe" Buy (Dollars 30.0) 601.0
+  second <- proposeTrade w accountCid "a1" quoteCid "SPYe" Buy (Dollars 30.0) 601.0
+  _ <- approve w first
+  approveMustFail w second "Could not find contract"

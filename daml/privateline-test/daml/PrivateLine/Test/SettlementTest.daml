@@ -1,0 +1,97 @@
+-- | Net settlement with the desk, and the vault's tokens as CIP-56 holdings.
+module PrivateLine.Test.SettlementTest where
+
+import DA.Assert ((===))
+import DA.List (sort)
+import DA.Map (Map)
+import qualified DA.Map as Map
+import DA.Optional (mapOptional)
+import Daml.Script
+
+import Splice.Api.Token.HoldingV1 (Holding)
+
+import PrivateLine.Account
+import PrivateLine.Actions
+import PrivateLine.Desk
+import PrivateLine.Holding
+import PrivateLine.Types
+
+import PrivateLine.Test.Setup
+
+-- | Add up balances per symbol.
+total : [Map Text Decimal] -> Map Text Decimal
+total = foldl (Map.unionWith (+)) Map.empty
+
+-- | Propose settling every open fill, paying from all of the vault's holdings.
+proposeSettlement : World -> Script (ContractId SettleProposal)
+proposeSettlement w = do
+  fills <- query @Fill w.vault
+  holdings <- query @DemoHolding w.vault
+  submit w.operator $ createCmd SettleProposal with
+    vault = w.vault
+    proposer = w.operator
+    deskAgreementCid = w.deskAgreementCid
+    fills = map fst fills
+    vaultHoldings = map fst holdings
+    batchRef = "batch-1"
+
+-- | After netting, the vault's tokens match the users' accounts to the unit.
+test_settlement_nets_fills_and_books_balance : Script ()
+test_settlement_nets_fills_and_books_balance = do
+  w <- setup
+  _ <- openAccount w w.alice "alice-1" 500.0 100.0
+  _ <- openAccount w w.bob "bob-1" 500.0 200.0
+  spy <- postQuote w "SPYe" 599.0 600.0
+  gold <- postQuote w "eXAU" 2600.0 2650.0
+  _ <- trade w w.alice "alice-1" spy "SPYe" Buy (Dollars 30.0) 601.0
+  _ <- trade w w.bob "bob-1" spy "SPYe" Buy (Dollars 60.0) 601.0
+  _ <- trade w w.bob "bob-1" gold "eXAU" Buy (Dollars 53.0) 2650.0
+  _ <- trade w w.alice "alice-1" spy "SPYe" Sell (Units 0.01) 599.0
+
+  proposal <- proposeSettlement w
+  _ <- approve w (toInterfaceContractId proposal)
+
+  openFills <- query @Fill w.vault
+  openFills === []
+  accounts <- query @Account w.vault
+  holdings <- query @DemoHolding w.vault
+  let books = total (map (\(_, account) -> account.balances) accounts)
+      tokens = total (map (\(_, holding) -> Map.fromList [(holding.symbol, holding.amount)]) holdings)
+  books === Map.fromList [(dollar, 162.99), ("SPYe", 0.14), ("eXAU", 0.02)]
+  tokens === books
+
+-- | A settlement that leaves out the vault's dollars cannot pay the desk, so it fails and the
+-- fills stay open.
+test_settlement_cannot_pay_with_missing_tokens : Script ()
+test_settlement_cannot_pay_with_missing_tokens = do
+  w <- setup
+  _ <- openAccount w w.alice "alice-1" 500.0 100.0
+  spy <- postQuote w "SPYe" 599.0 600.0
+  _ <- trade w w.alice "alice-1" spy "SPYe" Buy (Dollars 30.0) 601.0
+  fills <- query @Fill w.vault
+  proposal <- submit w.operator $ createCmd SettleProposal with
+    vault = w.vault
+    proposer = w.operator
+    deskAgreementCid = w.deskAgreementCid
+    fills = map fst fills
+    vaultHoldings = []
+    batchRef = "batch-1"
+  approveMustFail w (toInterfaceContractId proposal) "vault holds 0.0 USD"
+  stillOpen <- query @Fill w.vault
+  length stillOpen === 1
+
+-- | The vault's tokens are CIP-56 holdings: token-standard tools list them by instrument, with
+-- the desk as instrument admin and the vault as owner.
+test_vault_tokens_read_through_cip56 : Script ()
+test_vault_tokens_read_through_cip56 = do
+  w <- setup
+  _ <- openAccount w w.alice "alice-1" 500.0 100.0
+  spy <- postQuote w "SPYe" 599.0 600.0
+  _ <- trade w w.alice "alice-1" spy "SPYe" Buy (Dollars 30.0) 601.0
+  proposal <- proposeSettlement w
+  _ <- approve w (toInterfaceContractId proposal)
+
+  views <- queryInterface @Holding w.vault
+  let held = mapOptional snd views
+  sort (map (\v -> (v.instrumentId.id, v.amount)) held) === [("SPYe", 0.05), (dollar, 70.0)]
+  all (\v -> v.owner == w.vault && v.instrumentId.admin == w.desk) held === True
