@@ -1,7 +1,7 @@
 // HTTP: the website (static pages in web/), its JSON API, the sms-gate.app webhook and the phone
 // simulator. Node's built-in http module; no framework.
 
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { extname } from "node:path";
@@ -75,8 +75,22 @@ function rateLimit(client: string, bucket: keyof typeof LIMITS): void {
 
 class RateLimitError extends UserError {}
 
-/** The client's address; behind the HTTPS proxy (TRUST_PROXY=1) it is the first X-Forwarded-For hop. */
-function clientAddress(request: IncomingMessage): string {
+/** Whether the request came through the Cloudflare front door, which proves it with FRONT_DOOR_KEY. */
+function viaFrontDoor(request: IncomingMessage): boolean {
+  const key = process.env.FRONT_DOOR_KEY;
+  const presented = request.headers["x-front-door-key"];
+  if (!key || typeof presented !== "string") return false;
+  const digest = (value: string) => createHash("sha256").update(value).digest();
+  return timingSafeEqual(digest(presented), digest(key));
+}
+
+/**
+ * The client's address. Through the front door it is the visitor's address as Cloudflare saw it;
+ * behind the HTTPS proxy (TRUST_PROXY=1) it is the first X-Forwarded-For hop.
+ */
+export function clientAddress(request: IncomingMessage): string {
+  const visitor = request.headers["x-front-door-client"];
+  if (typeof visitor === "string" && visitor && viaFrontDoor(request)) return visitor;
   const forwarded = process.env.TRUST_PROXY === "1" ? (request.headers["x-forwarded-for"] as string | undefined) : undefined;
   return forwarded?.split(",")[0]?.trim() || request.socket.remoteAddress || "unknown";
 }

@@ -1,9 +1,9 @@
-import { $, api, h, onSubmit } from "/static/app.js";
+import { $, api, everyWhileVisible, h, onSubmit } from "/static/app.js";
 
 let email = "";
 let token = "";
 let phone = "";
-let inboxTimer = null;
+let stopInbox = () => {};
 let lastMessageId = 0;
 
 const params = new URLSearchParams(location.search);
@@ -59,15 +59,15 @@ onSubmit($("#phone-form"), async (data) => {
   $("#phone-code-form").hidden = false;
   if (result.simulator) {
     $("#inbox").hidden = false;
-    clearInterval(inboxTimer);
-    inboxTimer = setInterval(pollInbox, 1000);
+    stopInbox();
+    stopInbox = everyWhileVisible(1000, pollInbox);
     pollInbox();
   }
 });
 
 onSubmit($("#phone-code-form"), async (data) => {
   await api("/api/signup/verify-phone", { token, code: String(data.get("code")) });
-  clearInterval(inboxTimer);
+  stopInbox();
   step(3);
 });
 

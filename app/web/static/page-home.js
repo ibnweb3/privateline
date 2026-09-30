@@ -1,4 +1,4 @@
-import { $, api, h, pct, price } from "/static/app.js";
+import { $, api, everyWhileVisible, h, pct, price } from "/static/app.js";
 
 async function loadPrices() {
   const body = $("#prices");
@@ -42,4 +42,4 @@ async function loadStatus() {
 
 loadPrices();
 loadStatus();
-setInterval(loadStatus, 10000);
+everyWhileVisible(10000, loadStatus);

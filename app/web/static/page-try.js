@@ -1,4 +1,4 @@
-import { $, api, h } from "/static/app.js";
+import { $, api, everyWhileVisible, h } from "/static/app.js";
 
 const KEY = "privateline-demo-phone";
 
@@ -112,4 +112,4 @@ $("#new-number").addEventListener("click", () => {
 
 showNumber();
 poll();
-setInterval(poll, 1200);
+everyWhileVisible(1200, poll);

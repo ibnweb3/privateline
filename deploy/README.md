@@ -76,6 +76,31 @@ The setup script writes `app/.env` on the server:
 It then installs two services, `privateline-localnet` and `privateline`, which start on boot and
 restart the app if it stops.
 
+## 3. A name instead of an IP address (optional, free)
+
+The public address is https://privateline.pages.dev, a Cloudflare Pages front door
+(`front-door/public/_worker.js`) that forwards every request to the server. The app still runs
+only on the server, next to the Canton stack.
+
+```bash
+npx wrangler pages project create privateline --production-branch main --force   # once
+deploy/front-door.sh <external-ip>
+```
+
+The script:
+
+- gives `app/.env` a `FRONT_DOOR_KEY` and points `PUBLIC_URL` (the address in texts) at the name;
+- stores the key and the server's address as Pages secrets, and deploys the front door;
+- has Caddy send anyone who opens a page by IP address to the name.
+
+API calls and webhooks still work at the IP address.
+
+The front door passes on each visitor's address, so the rate limits stay per visitor. The app
+believes that address only when the request also carries `FRONT_DOOR_KEY`, so nobody can fake it
+by calling the server directly.
+
+Cloudflare's free plan allows 100,000 requests a day. Pages poll only while their tab is visible.
+
 ## Security
 
 - `deploy/firewall.sh` (run at boot) allows only 22, 80 and 443 into the host (ufw). It also drops new
@@ -94,7 +119,8 @@ restart the app if it stops.
 ## Updating
 
 Run `deploy/upload.sh <ip>` again, then on the server:
-`cd ~/privateline/app && npm ci && sudo systemctl restart privateline`.
+`cd ~/privateline/app && npm ci && sudo systemctl restart privateline`. The front door only needs
+redeploying when `front-door/` changes: `cd deploy/front-door && npx wrangler pages deploy`.
 
 If the Daml package changed, also run `node scripts/localnet-setup.ts` before restarting. It
 distributes the new DAR through DecMan.

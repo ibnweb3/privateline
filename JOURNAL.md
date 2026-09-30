@@ -363,3 +363,27 @@ participants. Then `scripts/funding-e2e.ts` ran against the live site:
 
 After that, `settle.ts` still reports that the books balance: the vault's $205.97 equals the sum
 of all accounts.
+
+## A name — 2026-09-30 — https://privateline.pages.dev
+
+An IP address in the link looked unfinished. PrivateLine can't move onto Cloudflare the way our
+earlier Workers projects did, because it needs the Canton stack next to it. So Cloudflare Pages
+now hosts a front door of about 20 lines, `deploy/front-door/public/_worker.js`, that forwards
+every request to the server. It still costs $0.
+
+Details that mattered:
+
+- **Rate limits.** Through a proxy, every visitor would share Cloudflare's address and one
+  rate-limit bucket: 5 sign-ups an hour for the whole world. The front door passes on the
+  visitor's address, and the app believes it only when the request also carries a shared key
+  (`FRONT_DOOR_KEY`). The key lives only in the server's `.env` and as a Pages secret.
+- **The IP address still works, but pages opened there redirect to the name.** API calls and
+  webhooks are served at both addresses.
+- **Cloudflare's free plan allows 100,000 requests a day.** The phone simulator polls every
+  1.2 s, so every page now polls only while its tab is visible.
+- Wrangler 4.144 sends new Pages projects to Workers. `--force` created the project on classic
+  Pages, which is what gets the short `privateline.pages.dev` name.
+
+Checked: `funding-e2e.ts` passed through the new address (deposit credited in 2.7 s, withdrawal
+in 2.9 s). A packet capture on the server showed the proxied request carrying the right key and
+the visitor's real address.

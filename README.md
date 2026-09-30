@@ -7,9 +7,10 @@ you reply `YES` and your PIN, and the trade runs on Canton. Your holdings are vi
 and the vault, and the vault is a decentralized party run by three independent operators: **every
 trade needs 2 of the 3**, so no single company can move your money.
 
-**Try it live: https://20.91.214.194.sslip.io/try.** It's a phone simulator in the browser that
+**Try it live: https://privateline.pages.dev/try.** It's a phone simulator in the browser that
 needs no real phone. It runs on BitSafe's Decentralization Manager LocalNet, on a small server,
-with demo dollars only.
+with demo dollars only. Cloudflare Pages forwards requests to that server
+([deploy/README.md](deploy/README.md)).
 
 Built for HackCanton Season 3: Financial Applications track and BitSafe's "Decentralizing Apps on
 Canton" challenge. Launch market for the pitch: Nigeria, where most people have a phone but many
@@ -144,8 +145,8 @@ People in Nigeria pay by bank transfer and USSD, so that's how money comes in. N
 to **dollars**, not to CC or cBTC. Deposits should hold their value until the user chooses an
 investment, and a CC transfer is public on the ledger, which a private wallet shouldn't need.
 
-**The demo, live now.** Try it at [/try](https://20.91.214.194.sslip.io/try) and
-[/bank](https://20.91.214.194.sslip.io/bank).
+**The demo, live now.** Try it at [/try](https://privateline.pages.dev/try) and
+[/bank](https://privateline.pages.dev/bank).
 
 1. Text `DEPOSIT`. PrivateLine replies with a personal deposit account number and today's rate:
    the market rate from open.er-api.com plus a 1.5% exchange spread.
@@ -248,7 +249,7 @@ daml/privateline-test/   21 Daml Script tests (trades, limits, 2 of 3, privacy, 
 daml/dars/               BitSafe's governance DARs and the CIP-56 API DARs we build against
 app/src/                 service: ledger + DecMan clients, operator, checkers, desk, prices, SMS, web API
 app/web/                 website: home, try (phone simulator), demo bank, sign-up, sign-in, account, privacy
-app/test/                23 unit tests (commands, price rules, webhook signatures, crypto, funding)
+app/test/                25 unit tests (commands, price rules, webhook signatures, crypto, funding, proxy)
 app/scripts/             LocalNet setup and demo scripts
 scripts/dev/             Windows/WSL setup helpers
 ```
@@ -267,7 +268,7 @@ scripts/dev/             Windows/WSL setup helpers
   - phone-change cooldown and checker refusal;
   - deposit then withdraw keeps the books balanced, no withdrawing more than the balance, and the
     desk can't burn the vault's dollars.
-- **App:** `npm test` (23 unit tests) and `npm run check` (types).
+- **App:** `npm test` (25 unit tests) and `npm run check` (types).
 - **End to end, against a running app:**
   - `npm run e2e` signs up and texts a full conversation;
   - `node scripts/funding-e2e.ts` deposits naira from the demo bank and withdraws back to it;

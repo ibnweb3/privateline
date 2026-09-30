@@ -68,7 +68,22 @@ export function onSubmit(form, handler) {
   });
 }
 
-export const shortId = (id, head = 10, tail = 6) => (id.length > head + tail + 1 ? `${id.slice(0, head)}...${id.slice(-tail)}` : id);
+/**
+ * Call fn every ms while the tab is visible, and right away when it becomes visible again. Hidden
+ * tabs don't poll, which keeps the free front door's daily request allowance for real visitors.
+ * Returns a function that stops it.
+ */
+export function everyWhileVisible(ms, fn) {
+  const tick = () => { if (!document.hidden) fn(); };
+  const timer = setInterval(tick, ms);
+  document.addEventListener("visibilitychange", tick);
+  return () => {
+    clearInterval(timer);
+    document.removeEventListener("visibilitychange", tick);
+  };
+}
+
+export const shortId =(id, head = 10, tail = 6) => (id.length > head + tail + 1 ? `${id.slice(0, head)}...${id.slice(-tail)}` : id);
 
 export function timeAgo(ms) {
   const seconds = Math.round((Date.now() - ms) / 1000);

@@ -15,3 +15,4 @@ dist/
 .localnet.json
 # local editor/assistant settings
 .claude/
+.wrangler/

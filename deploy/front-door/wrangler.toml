@@ -1,0 +1,5 @@
+# Cloudflare Pages project for the front door (deploy/front-door.sh). FRONT_DOOR_KEY and ORIGIN
+# are Pages secrets, set by that script.
+name = "privateline"
+pages_build_output_dir = "public"
+compatibility_date = "2026-09-01"

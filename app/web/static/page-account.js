@@ -1,4 +1,4 @@
-import { $, api, h, onSubmit, price, quantity, timeAgo, usd } from "/static/app.js";
+import { $, api, everyWhileVisible, h, onSubmit, price, quantity, timeAgo, usd } from "/static/app.js";
 
 async function load() {
   const me = await api("/api/me");
@@ -86,4 +86,4 @@ load().catch((error) => {
   $("#total").textContent = "";
   $("#subline").textContent = error.message;
 });
-setInterval(() => load().catch(() => {}), 15000);
+everyWhileVisible(15000, () => load().catch(() => {}));

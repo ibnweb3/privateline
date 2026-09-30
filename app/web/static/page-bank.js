@@ -1,4 +1,4 @@
-import { $, api, h, onSubmit, timeAgo, usd } from "/static/app.js";
+import { $, api, everyWhileVisible, h, onSubmit, timeAgo, usd } from "/static/app.js";
 
 const KEY = "privateline-demo-bank";
 const ngn = (value) => `₦${Math.round(value).toLocaleString("en-US")}`;
@@ -66,4 +66,4 @@ onSubmit($("#transfer"), async (data) => {
 
 api("/api/fx").then((result) => { rates = result; showRate(); }).catch(() => { $("#rate-hint").textContent = "Rate unavailable right now."; });
 loadStatement();
-setInterval(loadStatement, 4000);
+everyWhileVisible(4000, loadStatement);
