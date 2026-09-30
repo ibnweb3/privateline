@@ -13,3 +13,7 @@ PrivateLine's packages build against these DARs. They are copied unchanged by
 
 The two governance DARs are the files `hackathon/seed.sh` distributes to LocalNet, so the
 package ids match. All four are Apache-2.0 (DLC-Link and Digital Asset).
+
+`privateline-v0-0.1.0.dar` is our own first release, the version first deployed to LocalNet. The
+current package lists it under `upgrades:`, so every build checks that the new version is a valid
+smart-contract upgrade and existing accounts keep working.

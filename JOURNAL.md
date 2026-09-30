@@ -125,3 +125,200 @@ other error. Build and test take about 2.5 minutes on `/mnt/c` from WSL.
 - Allocate the desk and user parties.
 - Run one trade end to end through DecMan's confirm and execute, from two different nodes, and
   see it on the BitSafe dashboard.
+
+## Day 3 — 2026-09-29 — on BitSafe's LocalNet, through their dashboard
+
+**Result.** A real trade now runs end to end on BitSafe's Decentralization Manager LocalNet, in
+about 11 seconds:
+
+1. The SMS operator opens a funded account for a user. The operator (node 1) and the price
+   checker (node 2) confirm through DecMan, and node 2 executes.
+2. The desk quotes SPYe.
+3. The operator proposes "buy $30 of SPYe". This time the operator (node 1) and the risk checker
+   (node 3) confirm, and node 3 executes. Either checker can complete an approval.
+4. The user's account shows 0.05 SPYe and $70. The desk sees the fill with no user named, and
+   zero accounts.
+5. A settlement batch, again 2 of 3, moves the actual tokens. Afterwards the vault holds exactly
+   0.05 SPYe and 70 USD, matching the account.
+
+BitSafe's dashboard shows all of it
+([screenshot](docs/screenshots/day3-bitsafe-dashboard.jpg)):
+
+- the `privateline-vault` party, with 3 owners and a threshold of 2 of 3;
+- its **holdings (SPYe 0.05, USD 70), picked up through the CIP-56 `Holding` interface with no
+  extra work on our side**;
+- an audit trail with each `OpenAccountProposal`, `TradeProposal` and `SettleProposal` and their
+  confirm and execute events.
+
+**What was built** (`app/`, TypeScript run directly by Node 24, no runtime dependencies):
+
+- `src/ledger.ts`: a client for the Canton JSON Ledger API v2, written against the OpenAPI spec
+  the participant serves at `/docs/openapi`.
+- `src/decman.ts`: a client for DecMan's REST API (confirm, execute, pending actions, DAR
+  distribution, invitations, audit).
+- `src/governance.ts`: runs the confirm-then-execute sequence across nodes.
+- `src/localnet.ts`: finds the vault and each node's member party. A party allocated on a
+  participant carries that participant's fingerprint, so each member is matched to its node from
+  the governance rules on the ledger.
+- `scripts/localnet-setup.ts` (`npm run localnet:setup`): distributes the DAR through DecMan's
+  multi-party workflow (node 1 proposes, nodes 2 and 3 accept), then allocates the desk and
+  creates its faucet and agreement. It can be re-run safely.
+- `scripts/trade-demo.ts` (`npm run demo:trade`) and `scripts/settle.ts` (`npm run demo:settle`).
+  The settle script also checks that the vault's tokens equal the sum of all accounts.
+- `scripts/dev/localnet-vault.sh`: creates the `privateline-vault` party with BitSafe's
+  `seed.sh` (`PARTY_PREFIX=privateline-vault`), reusing the member parties and governance DARs.
+
+**Gotchas:**
+
+- **Restarting WSL kills the stack, and Splice doesn't recover on its own.** Docker restarts
+  Splice before Postgres is ready. Splice gives up on the database ("exhausted retries") and
+  then sits unhealthy forever. The fix is `docker restart splice` followed by
+  `hackathon/up.sh` again. Startup then took 77 s.
+- **BitSafe's `seed.sh` allocates member parties with `party_id_hint` in snake case.** The JSON
+  Ledger API expects `partyIdHint`, so the hint is ignored and the members get random names
+  (`party-a0515a2e-…`). Our client sends `partyIdHint`, so our parties are named
+  `privateline-desk` and `demo-user-1`. This is a one-line upstream fix we could offer.
+- **The price is a fixed demo price for now.** Live Cantex quotes come next.
+
+## Days 4-7 (built 2026-09-29) — prices, checkers, SMS, website, safety
+
+The plan spread these over four days. They all went in today, and each was tested on the real
+LocalNet stack.
+
+**Prices.**
+
+- The desk quotes from Cantex's public API: pool reserves converted to dollars through the
+  CC-USDCx pool, plus a 0.4% spread.
+- The checkers compare against the real-world price.
+- **CoinGecko started returning 403 from this machine, and Coinbase, Kraken and Binance don't
+  connect at all** (most likely Nigeria's ISP-level blocks on crypto exchanges). Yahoo Finance's
+  chart endpoint works without a key: SPY, QQQ, gold and silver futures, BTC-USD and ETH-USD.
+  SPY at $765.61 matched Cantex SPYe at $764.75, which confirms one SPYe tracks one SPY share.
+- Connections from here drop now and then (Cantex and Yahoo each timed out once), so fetches
+  retry.
+- **Replay mode** serves the Sep 26 06:38 UTC snapshot from the old gap logger: cETH +2.34%,
+  gold +2.34%, cBTC +2.06%, QQQe +1.90%.
+
+**Checkers.** Two bots, one per checker node, each with its own DecMan node, ledger node and price
+fetch.
+
+- **The rule:** refuse if the price is more than 1.5% against the user (buying above the market,
+  or selling below it), or the quote expired, or a limit or balance fails.
+- **What a refusal leaves behind:** a `CheckRefusal` contract with the reason, a new template in
+  package version 0.2.0. The build now checks that each version is a valid upgrade of the one on
+  LocalNet (`upgrades:` in daml.yaml), and the deployed 0.1.0 account kept trading after the
+  upgrade.
+- **Results:**
+  - Replayed drift: both checkers refused a cETH buy in 3 s, with the reason on the ledger.
+  - Live: a SPY buy at +0.64% was confirmed by both and executed in 4.7 s.
+  - **Live, unplanned:** Cantex's gold bid was 1.69% under the market, and `SELL GOLD ALL` was
+    refused. The protection worked on real data.
+
+**Resilience (BitSafe's criteria):**
+
+- `docker stop decman-2` (the price checker's node): a trade still went through in 5.8 s with the
+  SMS operator and the risk checker.
+- `docker stop decman-3` as well: only 1 of 3 is left. After 30 s: "not enough operators approved
+  it in time", and no money moved.
+- That test found a bug. The reply said "you don't have enough for it", because the reason text
+  contains "not enough". Fixed, with a test.
+
+**SMS service** (`app/src/sms`, `app/src/app.ts`):
+
+- BinaText's sms-gate webhook parsing (signature over timestamp + body) and its send call, ported
+  to Node. It reads either the `sender` or the `phoneNumber` field, and can ignore the second SIM
+  of a dual-SIM phone.
+- Commands: `BAL`, `PRICE`, `BUY`, `SELL` (by dollars or `ALL`), `YES <PIN>`, `NO`,
+  `ALERT <asset> <pct>`, `ALERTS [OFF]`, `LOCK`, `HELP`. Word order, case and "$" don't matter.
+- Every trade is restated and needs `YES` plus the PIN within 2 minutes. Three wrong PINs pause
+  trading for 15 minutes.
+- Texts from each user are processed one at a time. Retried webhooks are de-duplicated.
+- **The simulator:** `+999` numbers (an unassigned country code) go to a phone on the website, so
+  no demo can ever text a real person.
+
+**Personal data, all off-ledger** (SQLite, built into Node):
+
+- phone numbers are AES-256-GCM encrypted;
+- a keyed HMAC finds the user when a text arrives;
+- a different keyed HMAC is the `phoneTag` on the ledger, which can't be brute-forced like a plain
+  hash of a phone number;
+- PINs are scrypt-hashed with a salt.
+
+**Caught before it shipped:** the file holding the encryption key (`app/data/app-secret`) was not
+gitignored. It is now, along with SQLite's `-wal` and `-shm` files.
+
+**SIM-swap protection:**
+
+- A `ChangePhoneProposal` whose contract refuses to run before `requestedAt + cooldown`.
+- The checkers only confirm after the cooldown, and only if it's long enough (24 h in production).
+- The old phone is warned and can reply `NO`.
+- Tested end to end with a 2-minute cooldown. The account moved 10 s after the cooldown ended, and
+  the old number stopped working.
+
+**Website** (`app/web`, no framework, light and dark, checked for overflow at 375 px):
+
+- **Home:** live prices, with "Canton vs market" for each asset.
+- **Try it:** the phone simulator.
+- **Sign-up:** email code (simulated delivery), SMS code (arrives in the page for `+999`
+  numbers), and a PIN. Weak PINs are refused.
+- **Sign-in and account:** holdings, daily limit, a lock switch, phone change, activity.
+- **Privacy:** the ledger queried live as you, as another user, as the desk and as the operators,
+  next to what's stored off-ledger.
+
+**Operator fix:** the operator now passes one confirmation per member when executing, because
+GovernanceRules rejects a repeated confirmer.
+
+**Tests:**
+
+- Daml: 18.
+- App: 19 unit tests.
+- End to end: sign-up, then the full conversation, the node-offline runs, the phone change, and
+  price alerts.
+
+**Still open:**
+
+- Real SMS through the gateway phone. It needs the SIM decision; the code and settings are ready.
+- Email delivery is simulated.
+- Writing, video and submission.
+
+## Deployment — 2026-09-30 — live without the laptop
+
+**PrivateLine now runs on a server: https://20.91.214.194.sslip.io.** It's an Azure VM in Sweden
+Central (Standard_D4as_v5: 4 vCPU, 16 GB, Ubuntu 24.04), paid by the free account's $200 credit.
+That's about $141 for 30 days, and the credit ends around Oct 29, after the Oct 21 final.
+
+**Getting a server for $0 took some searching:**
+
+- Google Cloud asked for a $30 prepayment, which is refundable only on some account types.
+- DigitalOcean gave only $5 of credit; the $200 offer comes through referral links. It also needed
+  a card that verifies, or a PayPal top-up.
+- Contabo's $4.95/month was over budget.
+- On Azure's free trial, most VM sizes are blocked region by region (`NotAvailableForSubscription`),
+  and the portal just says "unavailable". The Azure CLI shows exactly where each size is open: one
+  `az vm list-skus --all` (8 MB of JSON, 70,000 entries) filtered locally.
+  - D4as_v5 is open in Sweden Central, North Central US and South Africa North, among others, but
+    not in East US.
+  - Quota was never the problem: 4 vCPUs per family per region.
+- The Microsoft.Compute and Microsoft.Network resource providers had to be registered on the new
+  subscription first.
+
+**The deployment kit** (`deploy/`):
+
+- `upload.sh` sends the working tree over scp, with no commit needed and nothing gitignored.
+- `server-setup.sh` sets up the server in one run: firewall, swap, Docker, Node 24, BitSafe's
+  LocalNet, the vault, the app, systemd services and Caddy for HTTPS on sslip.io. On Azure it took
+  about 12 minutes, because downloads that crawl on the home connection are fast there.
+- `firewall.sh` (ufw plus a DOCKER-USER rule) and Azure's network security group both keep
+  everything but 22, 80 and 443 closed.
+
+**Checked after deploying:**
+
+- A port scan from outside: 8081-8083 (DecMan, no login on LocalNet), 2975/3975/4975 (ledger),
+  5432 and 8790 are all closed.
+- The full SMS conversation works: trades take 2.7 to 3.6 s including the 2-of-3 approval, faster
+  than on the laptop.
+- **After a reboot, everything came back on its own in about 2 minutes.** The accounts and the
+  database state survived, and the books still balance.
+- Memory runs at about 5.3 of 15 GB.
+
+BitSafe's dashboard is reachable only through an SSH tunnel (`deploy/README.md`).

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign up for PrivateLine</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="wrap top">
+    <a class="brand" href="/" aria-label="PrivateLine home">
+      <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><path fill="var(--accent)" d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-7 5v-5H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z"/><rect fill="var(--surface)" x="8" y="10" width="16" height="2.4" rx="1.2"/><rect fill="var(--surface)" x="8" y="15" width="10" height="2.4" rx="1.2"/></svg>
+      PrivateLine
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/try">Try it</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/signin">Sign in</a>
+    </nav>
+  </header>
+
+  <main class="narrow section" style="padding-top:8px">
+    <h1 style="font-size:clamp(1.8rem,1.3rem + 2vw,2.4rem)">Open your account</h1>
+    <p class="muted">Three steps: your email, your phone, and a PIN you'll use to confirm every trade.</p>
+    <div class="stepper" aria-hidden="true"><span id="bar-1" class="done"></span><span id="bar-2"></span><span id="bar-3"></span></div>
+
+    <section class="card" id="step-email">
+      <form id="email-form">
+        <label for="email">Email
+          <input id="email" name="email" type="email" autocomplete="email" spellcheck="false" required>
+          <span class="hint">You sign in to your account page with it. It never goes on the ledger.</span>
+        </label>
+        <p class="error" role="alert"></p>
+        <button class="btn" type="submit">Send me a code</button>
+      </form>
+      <form id="email-code-form" hidden>
+        <p class="note" id="dev-code" hidden></p>
+        <label for="email-code">Code from your email
+          <input id="email-code" name="code" class="code" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code" spellcheck="false" required>
+        </label>
+        <p class="error" role="alert"></p>
+        <button class="btn" type="submit">Continue</button>
+      </form>
+    </section>
+
+    <section class="card" id="step-phone" hidden>
+      <form id="phone-form">
+        <label for="phone">Phone number
+          <input id="phone" name="phone" type="tel" autocomplete="tel" spellcheck="false" placeholder="+234 803 123 4567" required>
+          <span class="hint">You'll text PrivateLine from this phone. The demo uses +999 numbers, which reach the simulator on the Try it page.</span>
+        </label>
+        <p class="error" role="alert"></p>
+        <button class="btn" type="submit">Text me a code</button>
+      </form>
+      <form id="phone-code-form" hidden>
+        <div class="inbox sms" id="inbox" hidden aria-live="polite"><span class="muted small">Messages to your demo phone</span></div>
+        <label for="phone-code">Code from the text message
+          <input id="phone-code" name="code" class="code" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code" spellcheck="false" required>
+        </label>
+        <p class="error" role="alert"></p>
+        <button class="btn" type="submit">Verify phone</button>
+      </form>
+    </section>
+
+    <section class="card" id="step-pin" hidden>
+      <form id="pin-form">
+        <label for="pin">Choose a PIN
+          <input id="pin" name="pin" type="password" inputmode="numeric" pattern="\d{4,6}" minlength="4" maxlength="6" autocomplete="new-password" required>
+          <span class="hint">4 to 6 digits. You'll reply YES and this PIN to confirm each trade. We store only a salted hash of it.</span>
+        </label>
+        <label for="pin-again">PIN again
+          <input id="pin-again" name="pinAgain" type="password" inputmode="numeric" pattern="\d{4,6}" minlength="4" maxlength="6" autocomplete="new-password" required>
+        </label>
+        <p class="error" role="alert"></p>
+        <button class="btn" type="submit">Open my account</button>
+        <p class="note good" id="opening" hidden>Opening your account on Canton. The SMS operator proposes it, and an independent checker has to approve it (2 of 3). This takes a few seconds.</p>
+      </form>
+    </section>
+
+    <section class="card" id="step-done" hidden>
+      <p class="eyebrow">Account open</p>
+      <h2 id="done-title">Welcome to PrivateLine</h2>
+      <p class="muted">You have $100.00 in demo dollars. We've texted you a welcome message.</p>
+      <div class="actions">
+        <a class="btn" href="/try">Text it now</a>
+        <a class="btn secondary" href="/account">See my account</a>
+      </div>
+    </section>
+  </main>
+
+  <script type="module" src="/static/page-signup.js"></script>
+</body>
+</html>

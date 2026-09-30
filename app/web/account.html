@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Your PrivateLine account</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="wrap top">
+    <a class="brand" href="/" aria-label="PrivateLine home">
+      <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><path fill="var(--accent)" d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-7 5v-5H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z"/><rect fill="var(--surface)" x="8" y="10" width="16" height="2.4" rx="1.2"/><rect fill="var(--surface)" x="8" y="15" width="10" height="2.4" rx="1.2"/></svg>
+      PrivateLine
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/try">Try it</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/account" aria-current="page">Account</a>
+    </nav>
+  </header>
+
+  <main class="wrap section" style="padding-top:8px">
+    <div class="row">
+      <div>
+        <p class="eyebrow" id="account-id">Account</p>
+        <p class="big money" id="total">...</p>
+        <p class="muted" id="subline"></p>
+      </div>
+      <button class="btn secondary" type="button" id="signout">Sign out</button>
+    </div>
+
+    <p class="note" id="locked-note" hidden>This account is locked: text commands are refused until you unlock it below.</p>
+
+    <div class="grid two" style="margin-top:18px">
+      <section class="card" aria-labelledby="holdings-title">
+        <h2 id="holdings-title" style="font-size:1.2rem">Holdings</h2>
+        <div class="table-scroll">
+          <table>
+            <thead><tr><th>Asset</th><th class="r">Amount</th><th class="r">Price</th><th class="r">Value</th></tr></thead>
+            <tbody id="holdings"></tbody>
+          </table>
+        </div>
+        <p class="muted small" style="margin:12px 0 0">Valued at Canton mid prices. The tokens themselves are held by the 2-of-3 vault; your share is recorded in your private account contract.</p>
+      </section>
+
+      <section class="card" aria-labelledby="safety-title">
+        <h2 id="safety-title" style="font-size:1.2rem">Safety</h2>
+        <p class="muted small" id="limit-text"></p>
+        <div class="bar" aria-hidden="true"><span id="limit-bar" style="width:0"></span></div>
+        <div style="margin-top:18px">
+          <label class="switch" for="lock"><input type="checkbox" id="lock" role="switch"> Lock my account</label>
+          <p class="muted small" style="margin:6px 0 0">Locked accounts refuse every text command. Text LOCK from your phone, or switch it here; only this page unlocks it.</p>
+        </div>
+        <p class="muted small" id="pin-paused" hidden></p>
+      </section>
+
+      <section class="card" aria-labelledby="phone-title">
+        <h2 id="phone-title" style="font-size:1.2rem">Phone</h2>
+        <p>Texts come from <span class="sms" id="phone"></span>.</p>
+        <p class="note" id="phone-change" hidden></p>
+        <form id="phone-form">
+          <label for="new-phone">Move to a new phone
+            <input id="new-phone" name="phone" type="tel" autocomplete="tel" spellcheck="false" placeholder="+999 ..." required>
+            <span class="hint">We text a code to the new phone. The move then waits out a cooldown, and your current phone can stop it by replying NO. That is what stops a SIM swap.</span>
+          </label>
+          <p class="error" role="alert"></p>
+          <button class="btn secondary" type="submit">Text a code to the new phone</button>
+        </form>
+        <form id="phone-code-form" hidden>
+          <label for="phone-code">Code from the new phone
+            <input id="phone-code" name="code" class="code" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code" spellcheck="false" required>
+          </label>
+          <p class="error" role="alert"></p>
+          <button class="btn" type="submit">Start the move</button>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="activity-title">
+        <h2 id="activity-title" style="font-size:1.2rem">Activity</h2>
+        <ul class="list small" id="activity"></ul>
+        <h3 style="margin-top:16px">Price alerts</h3>
+        <p class="muted small" id="alerts"></p>
+      </section>
+    </div>
+
+    <p style="margin-top:20px"><a href="/privacy">See exactly who can see this account on the ledger</a></p>
+  </main>
+
+  <script type="module" src="/static/page-account.js"></script>
+</body>
+</html>

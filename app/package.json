@@ -1,0 +1,27 @@
+{
+  "name": "privateline-app",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PrivateLine backend: Canton ledger and DecMan clients, LocalNet setup and demo scripts",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "node --test \"test/*.test.ts\"",
+    "start": "node --env-file-if-exists=.env src/main.ts",
+    "localnet:setup": "node scripts/localnet-setup.ts",
+    "demo:trade": "node scripts/trade-demo.ts",
+    "demo:settle": "node scripts/settle.ts",
+    "text": "node scripts/text.ts",
+    "demo:approval": "node --env-file-if-exists=.env scripts/approval-demo.ts",
+    "e2e": "node scripts/sms-e2e.ts",
+    "smsgate": "node --env-file-if-exists=.env scripts/smsgate-webhook.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}

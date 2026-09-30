@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Who can see your PrivateLine account</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="wrap top">
+    <a class="brand" href="/" aria-label="PrivateLine home">
+      <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><path fill="var(--accent)" d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-7 5v-5H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z"/><rect fill="var(--surface)" x="8" y="10" width="16" height="2.4" rx="1.2"/><rect fill="var(--surface)" x="8" y="15" width="10" height="2.4" rx="1.2"/></svg>
+      PrivateLine
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/try">Try it</a>
+      <a href="/privacy" aria-current="page">Privacy</a>
+      <a href="/account">Account</a>
+    </nav>
+  </header>
+
+  <main class="wrap section" style="padding-top:8px">
+    <p class="eyebrow">Read live from the ledger</p>
+    <h1 style="font-size:clamp(1.8rem,1.3rem + 2vw,2.6rem)">Who can see your account</h1>
+    <p class="lede" style="max-width:62ch">Each box below is the answer the Canton ledger gave just now when asked as that party. On Canton a contract is shared only with the parties named on it, so there is nothing for anyone else to find.</p>
+    <p class="muted small" id="loaded"></p>
+
+    <div class="view-grid" id="views" style="margin-top:16px">
+      <div class="card"><p class="muted">Asking the ledger...</p></div>
+    </div>
+
+    <section class="card" style="margin-top:16px" aria-labelledby="limits-title">
+      <h2 id="limits-title" style="font-size:1.2rem">What this does not hide</h2>
+      <ul class="list small">
+        <li><strong>Your texts.</strong> SMS is not encrypted. Your mobile network, and the SMS gateway, can read your messages, just as they can read bank SMS alerts. Replies never include your PIN, and a trade needs your PIN plus 2 of 3 operators.</li>
+        <li><strong>From the operators.</strong> The vault's three operators can see every account, by account ID, because they check limits and prices. They never see phone numbers.</li>
+        <li><strong>Canton Coin.</strong> Canton Coin transfers are public on explorers. PrivateLine's trades have no Canton Coin leg on the ledger; on MainNet the desk's own Cantex swaps would.</li>
+      </ul>
+    </section>
+  </main>
+
+  <script type="module" src="/static/page-privacy.js"></script>
+</body>
+</html>

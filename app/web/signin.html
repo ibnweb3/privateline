@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in to PrivateLine</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="wrap top">
+    <a class="brand" href="/" aria-label="PrivateLine home">
+      <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><path fill="var(--accent)" d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-7 5v-5H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z"/><rect fill="var(--surface)" x="8" y="10" width="16" height="2.4" rx="1.2"/><rect fill="var(--surface)" x="8" y="15" width="10" height="2.4" rx="1.2"/></svg>
+      PrivateLine
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/try">Try it</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/signup">Sign up</a>
+    </nav>
+  </header>
+
+  <main class="narrow section" style="padding-top:8px">
+    <h1 style="font-size:clamp(1.8rem,1.3rem + 2vw,2.4rem)">Sign in</h1>
+    <p class="muted">Your account page is where you unlock a locked account, move to a new phone, and see what the ledger holds for you.</p>
+    <section class="card">
+      <form id="email-form">
+        <label for="email">Email
+          <input id="email" name="email" type="email" autocomplete="email" spellcheck="false" required>
+        </label>
+        <p class="error" role="alert"></p>
+        <button class="btn" type="submit">Send me a code</button>
+      </form>
+      <form id="code-form" hidden>
+        <p class="note" id="dev-code" hidden></p>
+        <label for="code">Code from your email
+          <input id="code" name="code" class="code" inputmode="numeric" pattern="\d{6}" maxlength="6" autocomplete="one-time-code" spellcheck="false" required>
+        </label>
+        <p class="error" role="alert"></p>
+        <button class="btn" type="submit">Sign in</button>
+      </form>
+    </section>
+    <p class="muted small" style="margin-top:14px">No account yet? <a href="/signup">Sign up</a>.</p>
+  </main>
+
+  <script type="module">
+    import { $, api, h, onSubmit } from "/static/app.js";
+    let email = "";
+    const next = new URLSearchParams(location.search).get("next");
+    const target = next && next.startsWith("/") && !next.startsWith("//") ? next : "/account";
+    onSubmit($("#email-form"), async (data) => {
+      email = String(data.get("email"));
+      const { devCode } = await api("/api/signin/start", { email });
+      $("#email-form").hidden = true;
+      $("#code-form").hidden = false;
+      if (devCode) {
+        $("#dev-code").hidden = false;
+        $("#dev-code").replaceChildren("Demo: email delivery is simulated on LocalNet. Your code is ", h("strong", { class: "sms" }, devCode), ".");
+      }
+      $("#code").focus();
+    });
+    onSubmit($("#code-form"), async (data) => {
+      await api("/api/signin/finish", { email, code: String(data.get("code")) });
+      location.href = target;
+    });
+  </script>
+</body>
+</html>

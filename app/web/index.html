@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PrivateLine: stocks and gold by text message</title>
+  <meta name="description" content="Buy the S&P 500, gold or bitcoin by text message from any phone. Private on Canton; every trade needs 2 of 3 independent operators.">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="wrap top">
+    <a class="brand" href="/" aria-label="PrivateLine home">
+      <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><path fill="var(--accent)" d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-7 5v-5H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z"/><rect fill="var(--surface)" x="8" y="10" width="16" height="2.4" rx="1.2"/><rect fill="var(--surface)" x="8" y="15" width="10" height="2.4" rx="1.2"/></svg>
+      PrivateLine
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="/" aria-current="page">Home</a>
+      <a href="/try">Try it</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/account">Account</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="wrap hero">
+      <div class="hero-grid">
+        <div>
+          <p class="eyebrow">Private on Canton</p>
+          <h1>Stocks and gold by text message.</h1>
+          <p class="lede">Text <strong class="sms">BUY GOLD 20</strong> from any phone. No app, no mobile data. Your holdings stay private, and no single company can move your money: every trade needs 2 of 3 independent operators.</p>
+          <div class="actions">
+            <a class="btn" href="/try">Try it in your browser</a>
+            <a class="btn secondary" href="/signup">Sign up</a>
+          </div>
+        </div>
+        <div class="card" aria-label="Example conversation">
+          <div class="demo-thread sms">
+            <div class="bubble out">BUY GOLD 20</div>
+            <div class="bubble in">Buy $20.00 of Gold at about $4,145.59/oz (0.00482 oz)? Reply YES and your PIN within 2 min to confirm, NO to cancel. Ref TEA5E</div>
+            <div class="bubble out">YES ****</div>
+            <div class="bubble in">Done: bought 0.00482 oz Gold for $20.00 at $4,145.59/oz. Cash $80.00. Ref TEA5E</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="wrap section" aria-labelledby="prices-title">
+      <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap">
+        <h2 id="prices-title">Prices, checked against the real market</h2>
+        <span class="pill" id="price-mode">loading</span>
+      </div>
+      <p class="muted" style="max-width:70ch">These tokens trade on Canton. Before any trade, two independent checkers compare the Canton price with the real-world market price and refuse it if the user would pay more than 1.5% over the market, or sell for more than 1.5% under it.</p>
+      <div class="card table-scroll">
+        <table>
+          <thead>
+            <tr><th>Asset</th><th>Text</th><th class="r">Buy on Canton</th><th class="r">Sell on Canton</th><th class="r">Market price</th><th class="r">Canton vs market</th></tr>
+          </thead>
+          <tbody id="prices">
+            <tr><td colspan="6" class="muted">Loading prices...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="wrap section" aria-labelledby="how-title">
+      <div class="grid two">
+        <div>
+          <h2 id="how-title">How it works</h2>
+          <div class="steps">
+            <div class="step"><h3>Text a command</h3><p class="muted">BAL, PRICE GOLD, BUY SPY 20, SELL GOLD ALL. Amounts are in US dollars, and fractions of a share are fine.</p></div>
+            <div class="step"><h3>Confirm with your PIN</h3><p class="muted">Every trade is restated first. Reply YES and your PIN within 2 minutes. Three wrong PINs pause trading.</p></div>
+            <div class="step"><h3>2 of 3 operators approve</h3><p class="muted">The SMS operator proposes the trade on the ledger. It runs only when an independent checker confirms the price and your limits, through BitSafe's Decentralization Manager.</p></div>
+          </div>
+        </div>
+        <div class="card">
+          <h3>The vault's three operators</h3>
+          <p class="muted small">Your money sits in a vault that no single operator controls. Any 2 of the 3 can approve; one alone can't.</p>
+          <ul class="list" id="operators">
+            <li><strong>SMS operator</strong> <span class="muted">(node 1)</span><br><span class="muted small">Reads your texts and proposes every action.</span></li>
+            <li><strong>Price checker</strong> <span class="muted">(node 2)</span> <span class="pill" data-checker="price checker">checking</span><br><span class="muted small">Refuses trades at off-market prices, on its own price data.</span></li>
+            <li><strong>Risk checker</strong> <span class="muted">(node 3)</span> <span class="pill" data-checker="risk checker">checking</span><br><span class="muted small">Checks limits and holds phone changes for 24 hours against SIM swaps.</span></li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section class="wrap section" aria-labelledby="who-title">
+      <h2 id="who-title">Who can see your money</h2>
+      <div class="card who">
+        <div class="who-row"><strong>You</strong><span>Your balances and trades, on the ledger, under your own Canton party.</span></div>
+        <div class="who-row"><strong>Other users</strong><span>Nothing. Not your account, not your trades, not that you exist.</span></div>
+        <div class="who-row"><strong>The desk</strong><span>The size of each trade, never who made it. It never sees an account.</span></div>
+        <div class="who-row"><strong>The 3 operators</strong><span>Your account by its ID, to check limits. Never your phone number: the ledger only holds a keyed tag of it.</span></div>
+        <div class="who-row"><strong>The public</strong><span>Nothing. These contracts are not on any public explorer.</span></div>
+      </div>
+      <p class="muted small" style="margin-top:12px">Text messages themselves are not encrypted: your mobile network can read them, just as it can read bank SMS alerts. What PrivateLine keeps private is the ledger. <a href="/privacy">See it live for your account</a>.</p>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      PrivateLine runs on BitSafe's Decentralization Manager LocalNet for HackCanton Season 3. Balances are demo dollars and demo mirrors of tokens that trade on Canton MainNet (SPYe, QQQe, eXAU, eXAG, cBTC, cETH); prices are live from Cantex. No real money is involved.
+    </div>
+  </footer>
+
+  <script type="module" src="/static/page-home.js"></script>
+</body>
+</html>

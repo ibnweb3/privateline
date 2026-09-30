@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Try PrivateLine</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="wrap top">
+    <a class="brand" href="/" aria-label="PrivateLine home">
+      <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><path fill="var(--accent)" d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-7 5v-5H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z"/><rect fill="var(--surface)" x="8" y="10" width="16" height="2.4" rx="1.2"/><rect fill="var(--surface)" x="8" y="15" width="10" height="2.4" rx="1.2"/></svg>
+      PrivateLine
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/try" aria-current="page">Try it</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/account">Account</a>
+    </nav>
+  </header>
+
+  <main class="wrap section" style="padding-top:12px">
+    <div class="hero-grid">
+      <div>
+        <p class="eyebrow">Phone simulator</p>
+        <h1 style="font-size:clamp(1.8rem,1.2rem + 2.4vw,2.6rem)">Text PrivateLine from this page.</h1>
+        <p class="lede">This phone has its own demo number. Replies come from the same service that answers real phones through an Android SMS gateway, and every trade still needs 2 of 3 operators on the ledger.</p>
+
+        <div class="card" style="margin-top:20px">
+          <h3>Your demo number</h3>
+          <p><span class="sms num" id="my-number">...</span> <span class="pill" id="number-status">new</span></p>
+          <p class="muted small" id="signup-hint">Sign up with this number first, then text it. Numbers starting +999 aren't real, so a demo text can never reach anyone's phone.</p>
+          <div class="actions" style="margin-top:8px">
+            <a class="btn" id="signup-link" href="/signup">Sign up with this number</a>
+            <button class="btn secondary" type="button" id="new-number">Use a new number</button>
+          </div>
+        </div>
+
+        <div class="card" style="margin-top:16px">
+          <h3>Try these</h3>
+          <div class="chips" id="chips" aria-label="Example messages">
+            <button class="chip" type="button">HELP</button>
+            <button class="chip" type="button">BAL</button>
+            <button class="chip" type="button">PRICE</button>
+            <button class="chip" type="button">PRICE GOLD</button>
+            <button class="chip" type="button">BUY GOLD 20</button>
+            <button class="chip" type="button">BUY SPY 15</button>
+            <button class="chip" type="button">SELL GOLD ALL</button>
+            <button class="chip" type="button">ALERT BTC 2</button>
+            <button class="chip" type="button">NO</button>
+          </div>
+          <p class="muted small" style="margin:12px 0 0">After BUY or SELL, reply <span class="sms">YES</span> and your PIN. Each trade then waits for 2 of the vault's 3 operators to approve it on the ledger, through BitSafe's Decentralization Manager.</p>
+        </div>
+      </div>
+
+      <div class="phone" role="region" aria-label="Simulated phone">
+        <div class="phone-screen">
+          <div class="phone-head">
+            <strong>PrivateLine</strong>
+            <span class="muted small sms" id="head-number"></span>
+          </div>
+          <div class="thread sms" id="thread" aria-live="polite">
+            <p class="thread-empty" id="empty">No messages yet. Sign up with this number, then text <strong>HELP</strong>.</p>
+          </div>
+          <div class="composer">
+            <form id="composer" autocomplete="off">
+              <label class="sr-only" for="message">Message</label>
+              <input id="message" name="message" maxlength="160" placeholder="Text message" spellcheck="false" autocapitalize="characters" required>
+              <button class="btn" type="submit">Send</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer>
+    <div class="wrap">Demo on BitSafe's Decentralization Manager LocalNet. Demo dollars and demo mirror tokens only.</div>
+  </footer>
+
+  <script type="module" src="/static/page-try.js"></script>
+</body>
+</html>

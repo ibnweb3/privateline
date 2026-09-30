@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <style>
+    .b { fill: #0a7a4a; } .l { fill: #ffffff; }
+    @media (prefers-color-scheme: dark) { .b { fill: #34c285; } .l { fill: #062014; } }
+  </style>
+  <path class="b" d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-7 5v-5H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z"/>
+  <rect class="l" x="8" y="10" width="16" height="2.4" rx="1.2"/>
+  <rect class="l" x="8" y="15" width="10" height="2.4" rx="1.2"/>
+</svg>

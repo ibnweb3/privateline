@@ -1,0 +1,19 @@
+-- | What the independent checkers leave on the ledger when they say no.
+module PrivateLine.Checks where
+
+import Governance.Action (GovernableAction)
+
+-- | A checker's refusal to confirm a proposal, with the reason. Refusing is simply not
+-- confirming, which already blocks the action; this record makes the refusal and its reason
+-- visible to the other operators and to the audit trail. Only the checker signs it.
+template CheckRefusal
+  with
+    vault : Party
+    checker : Party
+    proposalCid : ContractId GovernableAction
+    actionLabel : Text
+    reason : Text
+    refusedAt : Time
+  where
+    signatory checker
+    observer vault

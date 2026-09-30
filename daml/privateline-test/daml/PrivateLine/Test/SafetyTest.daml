@@ -1,0 +1,78 @@
+-- | SIM-swap protection and checker refusals.
+module PrivateLine.Test.SafetyTest where
+
+import DA.Assert ((===))
+import qualified DA.Map as Map
+import DA.Time (hours, seconds)
+import Daml.Script
+
+import PrivateLine.Actions
+import PrivateLine.Checks
+import PrivateLine.Types
+
+import PrivateLine.Test.Setup
+
+-- | A phone change cannot run before its cooldown ends, even with 2 of 3 approvals. After the
+-- cooldown it moves the account to the new phone and leaves the balances alone.
+test_phone_change_waits_for_cooldown : Script ()
+test_phone_change_waits_for_cooldown = do
+  w <- setup
+  accountCid <- openAccount w w.alice "a1" 500.0 100.0
+  now <- getTime
+  proposal <- submit w.operator $ createCmd ChangePhoneProposal with
+    vault = w.vault
+    proposer = w.operator
+    accountCid
+    accountId = "a1"
+    newPhoneTag = "tag-a1-new-sim"
+    requestedAt = now
+    cooldown = hours 24
+  let action = toInterfaceContractId proposal
+  approveMustFail w action "cooldown runs until"
+  passTime (hours 24)
+  _ <- approve w action
+  movedCid <- findAccount w.alice "a1"
+  Some moved <- queryContractId w.alice movedCid
+  moved.phoneTag === "tag-a1-new-sim"
+  moved.balances === Map.fromList [(dollar, 100.0)]
+
+-- | A cooldown shorter than a minute is rejected when the proposal is created.
+test_phone_change_needs_a_real_cooldown : Script ()
+test_phone_change_needs_a_real_cooldown = do
+  w <- setup
+  accountCid <- openAccount w w.alice "a1" 500.0 100.0
+  now <- getTime
+  submitMustFail w.operator $ createCmd ChangePhoneProposal with
+    vault = w.vault
+    proposer = w.operator
+    accountCid
+    accountId = "a1"
+    newPhoneTag = "tag-a1-new-sim"
+    requestedAt = now
+    cooldown = seconds 30
+
+-- | The price checker refuses an off-market trade and says why. Its refusal is on the ledger for
+-- the operators, users never see it, and without the checker's confirmation the trade cannot run.
+-- The prices are the Sep 26 06:38 UTC Cantex snapshot, when cETH traded 2.34% above ETH.
+test_price_checker_refusal_blocks_and_explains : Script ()
+test_price_checker_refusal_blocks_and_explains = do
+  w <- setup
+  accountCid <- openAccount w w.alice "a1" 500.0 100.0
+  quoteCid <- postQuote w "cETH" 2735.97 2746.96
+  proposal <- proposeTrade w accountCid "a1" quoteCid "cETH" Buy (Dollars 30.0) 2760.0
+  now <- getTime
+  _ <- submit w.priceChecker $ createCmd CheckRefusal with
+    vault = w.vault
+    checker = w.priceChecker
+    proposalCid = proposal
+    actionLabel = "PrivateLineTrade"
+    reason = "cETH ask $2746.96 is 2.34% above the market price $2684.03 (limit 1.5%)"
+    refusedAt = now
+
+  refusals <- query @CheckRefusal w.vault
+  map (\(_, refusal) -> (refusal.checker, refusal.proposalCid)) refusals === [(w.priceChecker, proposal)]
+  alicesView <- query @CheckRefusal w.alice
+  alicesView === []
+
+  own <- confirm w proposal w.operator
+  tryExecute w proposal w.operator [own] >>= expectFailure "Enough confirmations"

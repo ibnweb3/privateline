@@ -1,0 +1,10 @@
+{
+  "description": "Cantex pool prices and real-world reference prices at 2026-09-26 06:38:14 UTC, from our gap logger. CC had risen about 4% in an hour; Cantex's CC-hub pools had not caught up, so cBTC, cETH, gold and the Nasdaq token traded about 2% above their real-world prices.",
+  "capturedAt": "2026-09-26T06:38:14Z",
+  "cantex": { "SPYe": 780.3550471, "QQQe": 760.6319137, "eXAU": 4381.167916, "eXAG": 64.30196159, "cBTC": 85620.86484, "cETH": 2746.963223 },
+  "market": { "SPYe": 773.63, "QQQe": 746.45, "eXAU": 4280.98, "eXAG": 64.92, "cBTC": 83896, "cETH": 2684.03 },
+  "sources": {
+    "cantex": "api.cantex.io/v1/public/pools/state (pool reserves through the CC-USDCx pool)",
+    "market": "CoinGecko: sp500-xstock, nasdaq-xstock, pax-gold, kinesis-silver, bitcoin, ethereum"
+  }
+}

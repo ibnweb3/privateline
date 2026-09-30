@@ -3,7 +3,15 @@ node_modules/
 .env.*
 !.env.example
 *.db
+*.db-wal
+*.db-shm
 *.sqlite
+# the key that encrypts phone numbers (generated on first run when APP_SECRET is unset)
+app-secret
 .daml/
 dist/
 *.log
+# party ids and contract ids of one machine's LocalNet (written by npm run localnet:setup)
+.localnet.json
+# local editor/assistant settings
+.claude/

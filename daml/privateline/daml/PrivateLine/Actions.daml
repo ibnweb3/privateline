@@ -8,6 +8,7 @@ module PrivateLine.Actions where
 import DA.Action (void, when)
 import DA.Date (toDateUTC)
 import qualified DA.Map as Map
+import DA.Time (RelTime, addRelTime, minutes)
 
 import Governance.Action
 
@@ -148,3 +149,38 @@ template SettleProposal
 
       executeImpl =
         void $ exercise deskAgreementCid DeskAgreement_Settle with fills; vaultHoldings
+
+-- | Move an account to a new phone after a cooldown. During the cooldown the old phone is told and
+-- can cancel, which defeats a SIM swap: someone who takes over a number cannot move the account
+-- before its owner notices. The risk checker only confirms a cooldown of at least 24 hours
+-- (shorter on LocalNet demos), and the contract refuses to run before `requestedAt + cooldown`,
+-- however many operators approve it early.
+template ChangePhoneProposal
+  with
+    vault : Party
+    proposer : Party
+    accountCid : ContractId Account
+    accountId : Text
+    newPhoneTag : Text
+    requestedAt : Time
+    cooldown : RelTime
+  where
+    signatory proposer
+    observer vault
+    ensure cooldown >= minutes 1
+
+    interface instance GovernableAction for ChangePhoneProposal where
+      view = GovernableActionView with
+        governanceParty = vault
+        proposer
+        actionLabel = "PrivateLineChangePhone"
+        description = "Move account " <> accountId <> " to a new phone, not before "
+          <> show (requestedAt `addRelTime` cooldown)
+
+      executeImpl = do
+        now <- getTime
+        assertMsg ("the phone change cooldown runs until " <> show (requestedAt `addRelTime` cooldown))
+          (now >= requestedAt `addRelTime` cooldown)
+        account <- fetch accountCid
+        assertMsg "account does not match" (account.accountId == accountId && account.vault == vault)
+        void $ exercise accountCid Account_ChangePhone with newPhoneTag

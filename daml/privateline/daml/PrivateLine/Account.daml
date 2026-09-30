@@ -57,6 +57,15 @@ template Account
           Sell -> adjust dollar dollars <$> debit symbol units balances
         create this with balances = newBalances; spentToday = spent; spentOn = today
 
+    -- | Point the account at a new phone (a SIM change or a new number).
+    choice Account_ChangePhone : ContractId Account
+      with
+        newPhoneTag : Text
+      controller vault
+      do
+        assertMsg "the new phone tag must differ from the current one" (newPhoneTag /= phoneTag)
+        create this with phoneTag = newPhoneTag
+
 -- | Take `amount` of `symbol` out of `balances`, failing if the user doesn't have it.
 debit : Text -> Decimal -> Map Text Decimal -> Update (Map Text Decimal)
 debit symbol amount balances = do
