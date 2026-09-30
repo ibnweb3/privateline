@@ -57,6 +57,17 @@ template Account
           Sell -> adjust dollar dollars <$> debit symbol units balances
         create this with balances = newBalances; spentToday = spent; spentOn = today
 
+    -- | Take funds out, e.g. a withdrawal to the user's bank. Fails if the user doesn't hold them.
+    choice Account_Debit : ContractId Account
+      with
+        symbol : Text
+        amount : Decimal
+      controller vault
+      do
+        assertMsg "debit must be positive" (amount > 0.0)
+        newBalances <- debit symbol amount balances
+        create this with balances = newBalances
+
     -- | Point the account at a new phone (a SIM change or a new number).
     choice Account_ChangePhone : ContractId Account
       with

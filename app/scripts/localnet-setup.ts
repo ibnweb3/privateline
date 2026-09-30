@@ -11,11 +11,11 @@ import { DecMan } from "../src/decman.ts";
 import { decman, findMembers, findVault, ledgers, saveDeployment, type Deployment } from "../src/localnet.ts";
 import { templates } from "../src/privateline.ts";
 
-const DAR_NAME = "privateline-v0-0.2.0.dar";
+const DAR_NAME = "privateline-v0-0.3.0.dar";
 const DAR = new URL(`../../daml/privateline/.daml/dist/${DAR_NAME}`, import.meta.url);
 // A template that first appears in this DAR version: if a participant can't resolve it, that
 // participant doesn't have this version yet.
-const NEWEST_TEMPLATE = templates.checkRefusal;
+const NEWEST_TEMPLATE = templates.withdrawProposal;
 
 const log = (line: string) => console.log(line);
 

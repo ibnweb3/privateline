@@ -9,7 +9,7 @@ KEY="${2:-$HOME/.ssh/privateline_gcp}"
 USER_NAME="${DEPLOY_USER:-privateline}"
 cd "$(dirname "$0")/.."
 
-DAR=daml/privateline/.daml/dist/privateline-v0-0.2.0.dar
+DAR=daml/privateline/.daml/dist/privateline-v0-0.3.0.dar
 [ -f "$DAR" ] || { echo "build the DAR first: scripts/dev/daml-test.sh"; exit 1; }
 
 list=$(mktemp)

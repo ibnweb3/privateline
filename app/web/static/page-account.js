@@ -27,6 +27,16 @@ async function load() {
   $("#pin-paused").hidden = !me.pinPausedUntil;
   if (me.pinPausedUntil) $("#pin-paused").textContent = `Trading is paused after 3 wrong PINs until ${new Date(me.pinPausedUntil).toLocaleTimeString()}.`;
 
+  const funding = me.funding;
+  const ngn = (value) => `₦${Math.round(value).toLocaleString("en-US")}`;
+  $("#deposit-bank").textContent = funding.bank;
+  $("#deposit-account").textContent = funding.accountNumber;
+  $("#bank-link").href = `/bank?to=${funding.accountNumber}`;
+  $("#deposit-rate").textContent = `Today: ${ngn(funding.depositRate)} buys $1, and $1 withdraws as ${ngn(funding.withdrawRate)} (market ${ngn(funding.marketRate)}, from ${funding.rateSource}). Every deposit and withdrawal is approved 2 of 3.`;
+  $("#payout").textContent = funding.payout
+    ? `Withdrawals go to ${funding.payout.bank} ${funding.payout.account} (${funding.payout.name}), the account you last deposited from. Text WITHDRAW 20.`
+    : "Withdrawals go back to the bank account you deposit from. Text WITHDRAW 20 once you've deposited.";
+
   $("#phone-change").hidden = !me.phoneChange;
   if (me.phoneChange) {
     $("#phone-change").textContent = `Moving to ${me.phoneChange.phone} after ${new Date(me.phoneChange.readyAt).toLocaleString()}. Your current phone can stop it by replying NO.`;

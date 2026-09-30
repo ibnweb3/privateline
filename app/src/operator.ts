@@ -154,6 +154,21 @@ export class Operator {
     return this.approveAndExecute(proposalCid, `deposit to ${fields.accountId}`);
   }
 
+  /** Pay a user out: debit the account and take the dollars out of the vault's tokens. */
+  async payOut(fields: { accountCid: string; accountId: string; amount: number; payoutRef: string }): Promise<Outcome> {
+    const holdings = (await this.ledger.query<DemoHolding>(this.vault, templates.demoHolding))
+      .filter((holding) => holding.payload.symbol === "USD");
+    const proposalCid = await this.propose(templates.withdrawProposal, {
+      faucetCid: this.deployment.faucetCid,
+      accountCid: fields.accountCid,
+      accountId: fields.accountId,
+      amount: decimal(fields.amount),
+      vaultHoldings: holdings.map((holding) => holding.contractId),
+      payoutRef: fields.payoutRef,
+    });
+    return this.approveAndExecute(proposalCid, `withdraw from ${fields.accountId}`);
+  }
+
   /** Get a firm quote from the desk, propose the trade, and see it through. */
   async trade(fields: { accountCid: string; accountId: string; symbol: string; side: Side; amount: TradeAmount; limitPrice: number; tradeRef: string }):
     Promise<Outcome & { quote: QuoteInfo; fill?: Fill }> {

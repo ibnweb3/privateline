@@ -184,3 +184,36 @@ template ChangePhoneProposal
         account <- fetch accountCid
         assertMsg "account does not match" (account.accountId == accountId && account.vault == vault)
         void $ exercise accountCid Account_ChangePhone with newPhoneTag
+
+-- | Pay a user out: take dollars out of their account and out of the vault's tokens, in one step
+-- that 2 of 3 operators approve. On LocalNet the vault's demo dollars are burned through the demo
+-- faucet; on MainNet the vault would send USDCx to the exchange that pays the user in naira. The
+-- SMS service only pays out to a bank account that has funded this wallet (`payoutRef` names it,
+-- masked), so a stolen phone cannot send money somewhere new.
+template WithdrawProposal
+  with
+    vault : Party
+    proposer : Party
+    faucetCid : ContractId DemoFaucet
+    accountCid : ContractId Account
+    accountId : Text
+    amount : Decimal
+    vaultHoldings : [ContractId DemoHolding]
+    payoutRef : Text
+  where
+    signatory proposer
+    observer vault
+    ensure amount > 0.0
+
+    interface instance GovernableAction for WithdrawProposal where
+      view = GovernableActionView with
+        governanceParty = vault
+        proposer
+        actionLabel = "PrivateLineWithdraw"
+        description = "Withdraw $" <> show amount <> " from account " <> accountId <> " to " <> payoutRef
+
+      executeImpl = do
+        account <- fetch accountCid
+        assertMsg "account does not match" (account.accountId == accountId && account.vault == vault)
+        void $ exercise accountCid Account_Debit with symbol = dollar; amount
+        void $ exercise faucetCid DemoFaucet_Burn with amount; vaultHoldings

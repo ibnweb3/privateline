@@ -15,6 +15,8 @@ export type Command =
   | { kind: "alerts" }
   | { kind: "alertsOff" }
   | { kind: "lock" }
+  | { kind: "deposit" }
+  | { kind: "withdraw"; dollars?: string; all: boolean }
   | { kind: "unknown"; hint?: string };
 
 const AMOUNT = /^\$?(\d{1,7}(?:\.\d{1,2})?)$/;
@@ -71,6 +73,17 @@ export function parseCommand(text: string): Command {
       return { kind: "alertsOff" };
     case "LOCK": case "FREEZE":
       return { kind: "lock" };
+    case "DEPOSIT": case "FUND": case "TOPUP":
+      return { kind: "deposit" };
+    case "ADD":
+      return rest[0] === "MONEY" || rest[0] === "FUNDS" ? { kind: "deposit" } : { kind: "unknown" };
+    case "WITHDRAW": case "CASHOUT": {
+      if (rest.includes("ALL")) return { kind: "withdraw", all: true };
+      const amounts = rest.filter((word) => money(word) !== undefined);
+      const dollars = amounts.length === 1 ? money(amounts[0]!) : undefined;
+      if (!dollars || Number(dollars) <= 0) return { kind: "unknown", hint: "How many US dollars? e.g. WITHDRAW 20 or WITHDRAW ALL" };
+      return { kind: "withdraw", dollars, all: false };
+    }
     default:
       return { kind: "unknown" };
   }

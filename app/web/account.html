@@ -16,6 +16,7 @@
     <nav class="nav" aria-label="Main">
       <a href="/">Home</a>
       <a href="/try">Try it</a>
+      <a href="/bank">Demo bank</a>
       <a href="/privacy">Privacy</a>
       <a href="/account" aria-current="page">Account</a>
     </nav>
@@ -54,6 +55,14 @@
           <p class="muted small" style="margin:6px 0 0">Locked accounts refuse every text command. Text LOCK from your phone, or switch it here; only this page unlocks it.</p>
         </div>
         <p class="muted small" id="pin-paused" hidden></p>
+      </section>
+
+      <section class="card" aria-labelledby="money-title">
+        <h2 id="money-title" style="font-size:1.2rem">Add or withdraw money</h2>
+        <p>Send naira to <strong id="deposit-bank"></strong>, account <strong class="sms" id="deposit-account"></strong>, from any bank app or USSD code.</p>
+        <p class="muted small" id="deposit-rate"></p>
+        <p class="small" id="payout"></p>
+        <p style="margin:0"><a class="btn secondary" id="bank-link" href="/bank">Open the demo bank</a></p>
       </section>
 
       <section class="card" aria-labelledby="phone-title">

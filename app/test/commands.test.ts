@@ -53,6 +53,16 @@ test("missing or unknown pieces come back with a hint", () => {
   assert.equal(kind("gibberish"), "unknown");
 });
 
+test("deposits and withdrawals", () => {
+  assert.equal(kind("DEPOSIT"), "deposit");
+  assert.equal(kind("add money"), "deposit");
+  assert.equal(kind("fund"), "deposit");
+  assert.deepEqual(parseCommand("WITHDRAW 20"), { kind: "withdraw", dollars: "20", all: false });
+  assert.deepEqual(parseCommand("withdraw $12.50"), { kind: "withdraw", dollars: "12.50", all: false });
+  assert.deepEqual(parseCommand("WITHDRAW ALL"), { kind: "withdraw", all: true });
+  assert.equal(kind("WITHDRAW"), "unknown");
+});
+
 test("alerts, lock and help", () => {
   const alert = parseCommand("ALERT GOLD 2");
   assert.equal(alert.kind === "alert" && alert.pct, 2);

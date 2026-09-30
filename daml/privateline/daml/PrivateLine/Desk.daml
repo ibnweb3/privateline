@@ -135,3 +135,24 @@ template DemoFaucet
       do
         assertMsg ("the faucet mints at most $" <> show maxPerMint) (amount > 0.0 && amount <= maxPerMint)
         create DemoHolding with issuer = desk; owner = vault; symbol = dollar; amount
+
+    -- | Burn demo dollars the vault pays out for a withdrawal. Stands in for sending USDCx to the
+    -- exchange that pays the user in naira. Returns the change, if any.
+    nonconsuming choice DemoFaucet_Burn : Optional (ContractId DemoHolding)
+      with
+        amount : Decimal
+        vaultHoldings : [ContractId DemoHolding]
+      controller vault
+      do
+        assertMsg "burn amount must be positive" (amount > 0.0)
+        held <- forA vaultHoldings (\cid -> do
+            holding <- fetch cid
+            assertMsg "holding belongs to another desk or vault" (holding.issuer == desk && holding.owner == vault)
+            pure (cid, holding))
+        let dollars = filter (\(_, holding) -> holding.symbol == dollar) held
+            available = sum (map (\(_, holding) -> holding.amount) dollars)
+        assertMsg ("vault holds " <> show available <> " USD, the withdrawal needs " <> show amount) (available >= amount)
+        forA_ dollars (\(cid, _) -> archive cid)
+        if available > amount
+          then Some <$> create DemoHolding with issuer = desk; owner = vault; symbol = dollar; amount = available - amount
+          else pure None

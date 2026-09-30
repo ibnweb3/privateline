@@ -6,6 +6,11 @@ import { randomBytes, randomUUID } from "node:crypto";
 
 import { policyFromEnv } from "./checks.ts";
 import type { Db, User } from "./db.ts";
+import { dollarsForNaira, naira, nairaForDollars, nairaRates } from "./fx.ts";
+import {
+  DEMO_BANK, demoTransferEvent, maskAccount, newVirtualAccountNumber, parsePaymentEvent, signPayment,
+  type IncomingTransfer,
+} from "./payments.ts";
 import type { Desk } from "./desk.ts";
 import type { Ledger } from "./ledger.ts";
 import type { Deployment } from "./localnet.ts";
@@ -23,6 +28,16 @@ import { maskPhone, normalizeE164 } from "./sms/phone.ts";
 
 /** A problem to show the person on the website. */
 export class UserError extends Error {}
+
+interface PendingWithdrawal {
+  dollars: number;
+  naira: number;
+  rate: number;
+  bank: string;
+  account: string;
+  name: string;
+  ref: string;
+}
 
 interface PendingTrade {
   side: "Buy" | "Sell";
@@ -64,6 +79,8 @@ export interface AppOptions {
   phoneChangeCooldownSeconds: number;
   /** "dev" shows email codes on screen instead of emailing them. */
   emailMode: "dev";
+  /** Shared secret that signs deposit notifications from the payment provider. */
+  paymentsSecret: string;
   log: (line: string) => void;
 }
 
@@ -133,7 +150,11 @@ export class PrivateLine {
 
     switch (command.kind) {
       case "help":
-        return reply("PrivateLine: BAL | PRICE GOLD | BUY GOLD 20 | SELL GOLD 10 or SELL GOLD ALL | ALERT GOLD 2 | LOCK. Amounts in US$. Every trade needs YES + your PIN.");
+        return reply("PrivateLine: BAL | DEPOSIT | PRICE GOLD | BUY GOLD 20 | SELL GOLD 10 or ALL | WITHDRAW 20 | ALERT GOLD 2 | LOCK. Amounts in US$. Trades and withdrawals need YES + your PIN.");
+      case "deposit":
+        return reply(await this.depositInstructions(user));
+      case "withdraw":
+        return reply(await this.startWithdrawal(user, command.dollars, command.all));
       case "balance":
         return reply(await this.balanceText(user));
       case "price":
@@ -266,7 +287,7 @@ export class PrivateLine {
     const pendingRow = this.db.pending(user.id);
     if (!pendingRow || pendingRow.expires_at < Date.now()) {
       if (pendingRow) this.db.deletePending(user.id);
-      return "Nothing to confirm. Confirmations expire after 2 minutes; text BUY or SELL to start again.";
+      return "Nothing to confirm. Confirmations expire after 2 minutes; text BUY, SELL or WITHDRAW to start again.";
     }
     if (user.pin_locked_until > Date.now()) {
       return `Too many wrong PINs. Trading is paused until ${new Date(user.pin_locked_until).toISOString().slice(11, 16)} UTC.`;
@@ -284,8 +305,141 @@ export class PrivateLine {
     }
     this.db.setPinState(user.id, 0, 0);
     this.db.deletePending(user.id);
+    if (pendingRow.kind === "withdraw") return this.executeWithdrawal(user, JSON.parse(pendingRow.payload) as PendingWithdrawal);
     const pending = JSON.parse(pendingRow.payload) as PendingTrade;
     return this.executeTrade(user, pending);
+  }
+
+  // ==========================================================================
+  // Money in and out (LocalNet: the demo bank; MainNet: a payment provider + a licensed exchange)
+  // ==========================================================================
+
+  /** The user's personal deposit account number, created on first use. */
+  virtualAccount(user: User): string {
+    let account = this.db.virtualAccount(user.id);
+    if (!account) {
+      do account = newVirtualAccountNumber(); while (this.db.userByVirtualAccount(account));
+      this.db.putVirtualAccount(account, user.id);
+    }
+    return account;
+  }
+
+  private async depositInstructions(user: User): Promise<string> {
+    const rates = await nairaRates();
+    return `To add money, send naira to ${DEMO_BANK}, account ${this.virtualAccount(user)} (PrivateLine ${user.account_id}), from your bank app or USSD. Rate: ${naira(rates.deposit)} = $1. We'll text you when it lands.`;
+  }
+
+  /**
+   * A naira transfer landed in a user's deposit account: convert it at the current rate and credit
+   * the dollars, approved 2 of 3. Idempotent per transfer reference, since providers retry.
+   */
+  async receivePayment(transfer: IncomingTransfer): Promise<void> {
+    if (this.db.deposit(transfer.reference)) return;
+    const user = this.db.userByVirtualAccount(transfer.toAccount);
+    if (!user) {
+      this.log(`payment ${transfer.reference} to unknown account ${transfer.toAccount}`);
+      return;
+    }
+    const rates = await nairaRates();
+    const dollars = dollarsForNaira(transfer.naira, rates);
+    const deposit = { reference: transfer.reference, user_id: user.id, naira: transfer.naira, dollars, rate: rates.deposit, status: "received", at: Date.now() };
+    this.db.putDeposit(deposit);
+    // Withdrawals only ever go back to a bank account that has funded this wallet.
+    this.db.putFundingSource({ user_id: user.id, bank: transfer.sender.bank, account_number: transfer.sender.account, name: transfer.sender.name, last_used: Date.now() });
+    const phone = secrets.decryptPhone(user.phone_enc);
+    if (dollars < 1 || dollars > this.policy.maxDeposit) {
+      this.db.putDeposit({ ...deposit, status: "review" });
+      this.db.addActivity(user.id, `Deposit of ${naira(transfer.naira)} held for review (outside $1-$${this.policy.maxDeposit})`);
+      await this.send(phone, `We received ${naira(transfer.naira)}. Deposits must be between $1 and $${this.policy.maxDeposit}, so our team will review this one. Ref ${transfer.reference.slice(-6)}`);
+      return;
+    }
+    await this.creditDeposit(user, deposit);
+  }
+
+  private async creditDeposit(user: User, deposit: { reference: string; naira: number; dollars: number; rate: number; status: string; at: number; user_id: string }): Promise<boolean> {
+    const account = await this.account(user);
+    const outcome = await this.options.operator.deposit({ accountCid: account.contractId, accountId: user.account_id, amount: deposit.dollars });
+    const phone = secrets.decryptPhone(user.phone_enc);
+    if (!outcome.ok) {
+      this.db.putDeposit({ ...deposit, status: "retry" });
+      this.log(`deposit ${deposit.reference} not credited yet: ${outcome.reason}`);
+      return false;
+    }
+    this.db.putDeposit({ ...deposit, status: "credited" });
+    const cash = balancesOf((await this.account(user)).payload).USD ?? 0;
+    this.db.addActivity(user.id, `Deposit: ${naira(deposit.naira)} = ${usd(deposit.dollars)} at ${naira(deposit.rate)}/$ (approved 2 of 3 in ${(outcome.elapsedMs / 1000).toFixed(1)}s)`);
+    await this.send(phone, `Received ${naira(deposit.naira)} = ${usd(deposit.dollars)} at ${naira(deposit.rate)}/$. Cash ${usd(cash)}. Text BUY GOLD 10 to invest.`);
+    return true;
+  }
+
+  private async startWithdrawal(user: User, dollars: string | undefined, all: boolean): Promise<string> {
+    const payout = this.db.payoutAccount(user.id);
+    if (!payout) return "Withdrawals go back to the bank account you deposited from. Text DEPOSIT to add money first.";
+    const cash = balancesOf((await this.account(user)).payload).USD ?? 0;
+    const amount = all ? Math.floor(cash * 100) / 100 : Number(dollars);
+    if (amount < 1) return all ? "You have less than $1 in cash. Text BAL to see your account." : "The smallest withdrawal is $1.";
+    if (amount > cash + 1e-9) return `You have ${usd(cash)} in cash. Sell first (e.g. SELL GOLD ALL) or withdraw less.`;
+    if (amount > this.policy.maxWithdrawal) return `The largest single withdrawal is ${usd(this.policy.maxWithdrawal)}.`;
+    const rates = await nairaRates();
+    const pending: PendingWithdrawal = {
+      dollars: amount,
+      naira: nairaForDollars(amount, rates),
+      rate: rates.withdraw,
+      bank: payout.bank,
+      account: payout.account_number,
+      name: payout.name,
+      ref: `W${randomBytes(2).toString("hex").toUpperCase()}`,
+    };
+    this.db.putPending(user.id, "withdraw", pending, Date.now() + CONFIRM_TTL_MS);
+    return `Withdraw ${usd(amount)} = ${naira(pending.naira)} (${naira(pending.rate)}/$) to ${payout.bank} ${maskAccount(payout.account_number)} (${payout.name})? Reply YES and your PIN within 2 min, NO to cancel. Ref ${pending.ref}`;
+  }
+
+  private async executeWithdrawal(user: User, pending: PendingWithdrawal): Promise<string> {
+    const account = await this.account(user);
+    const outcome = await this.options.operator.payOut({
+      accountCid: account.contractId,
+      accountId: user.account_id,
+      amount: pending.dollars,
+      payoutRef: `${pending.bank} ${maskAccount(pending.account)}`,
+    });
+    if (!outcome.ok) {
+      this.db.addActivity(user.id, `${pending.ref}: withdrawal of ${usd(pending.dollars)} not done: ${outcome.reason}`);
+      return `Not done: ${explainForUser(outcome.reason ?? "it was not approved", assetBySymbol("SPYe"))}. No money moved. Ref ${pending.ref}`;
+    }
+    // LocalNet: the demo bank pays the naira. MainNet: the exchange sells USDCx and the provider pays out.
+    this.db.addDemoBankEntry({ account_number: pending.account, direction: "in", counterparty: `PrivateLine ${user.account_id}`, naira: pending.naira, reference: pending.ref });
+    const cash = balancesOf((await this.account(user)).payload).USD ?? 0;
+    this.db.addActivity(user.id, `${pending.ref}: withdrew ${usd(pending.dollars)} = ${naira(pending.naira)} to ${pending.bank} ${maskAccount(pending.account)} (approved 2 of 3 in ${(outcome.elapsedMs / 1000).toFixed(1)}s)`);
+    return `Done: sent ${naira(pending.naira)} to ${pending.bank} ${maskAccount(pending.account)}. Cash ${usd(cash)}. Ref ${pending.ref}`;
+  }
+
+  /** The demo bank: a transfer from someone's bank account to a PrivateLine deposit account. */
+  async demoBankTransfer(fields: { toAccount: string; naira: number; senderBank: string; senderAccount: string; senderName: string }): Promise<{ reference: string }> {
+    if (!/^\d{10}$/.test(fields.toAccount)) throw new UserError("The account number must be 10 digits.");
+    if (!/^\d{10}$/.test(fields.senderAccount)) throw new UserError("Your account number must be 10 digits.");
+    if (!(fields.naira >= 100 && fields.naira <= 5_000_000)) throw new UserError("Send between N100 and N5,000,000.");
+    if (!this.db.userByVirtualAccount(fields.toAccount)) throw new UserError("No PrivateLine account has that deposit number. Text DEPOSIT to get yours.");
+    const reference = `DEMO-${Date.now()}-${randomBytes(3).toString("hex")}`;
+    // Same path as a real provider: a signed notification, verified and parsed before we act on it.
+    const raw = demoTransferEvent({ ...fields, reference });
+    const transfer = parsePaymentEvent(raw, signPayment(raw, this.options.paymentsSecret), this.options.paymentsSecret);
+    if (!transfer) throw new Error("demo transfer produced no payment");
+    this.db.addDemoBankEntry({ account_number: fields.senderAccount, direction: "out", counterparty: `${DEMO_BANK} ${fields.toAccount}`, naira: fields.naira, reference });
+    void this.receivePayment(transfer).catch((error: unknown) => this.log(`payment ${reference} failed: ${error instanceof Error ? error.message : error}`));
+    return { reference };
+  }
+
+  demoBankStatement(account: string) {
+    if (!/^\d{10}$/.test(account)) throw new UserError("The account number must be 10 digits.");
+    return this.db.demoBankStatement(account);
+  }
+
+  /** Credit deposits whose approval failed earlier (for example while a checker was offline). */
+  async retryDeposits(): Promise<void> {
+    for (const deposit of this.db.depositsWithStatus("retry")) {
+      const user = this.db.userById(deposit.user_id);
+      if (user) await this.creditDeposit(user, deposit);
+    }
   }
 
   private async executeTrade(user: User, pending: PendingTrade): Promise<string> {
@@ -493,6 +647,19 @@ export class PrivateLine {
       activity: this.db.activity(user.id),
       phoneChange: change ? { readyAt: change.ready_at, phone: maskPhone(secrets.decryptPhone(change.new_phone_enc)) } : null,
       pinPausedUntil: user.pin_locked_until > Date.now() ? user.pin_locked_until : null,
+      funding: await (async () => {
+        const rates = await nairaRates();
+        const payout = this.db.payoutAccount(user.id);
+        return {
+          bank: DEMO_BANK,
+          accountNumber: this.virtualAccount(user),
+          depositRate: rates.deposit,
+          withdrawRate: rates.withdraw,
+          marketRate: rates.mid,
+          rateSource: rates.source,
+          payout: payout ? { bank: payout.bank, account: maskAccount(payout.account_number), name: payout.name } : null,
+        };
+      })(),
     };
   }
 
@@ -666,6 +833,7 @@ export class PrivateLine {
       if (outcome) this.log(`settlement ${outcome.ok ? "done" : `not done: ${outcome.reason}`}`);
     });
     every("quote clean-up", 5 * 60_000, () => this.options.desk.archiveExpired());
+    every("deposit retries", 60_000, () => this.retryDeposits());
   }
 }
 
@@ -696,5 +864,6 @@ export function explainForUser(reason: string, asset: Asset): string {
   if (/price moved/.test(reason)) return "the price moved more than 1% from the one you confirmed";
   if (/not enough|doesn't hold enough/.test(reason)) return "you don't have enough for it";
   if (/account changed/.test(reason)) return "your account changed while it was being approved; please try again";
+  if (/withdrawal needs|withdrawal over/.test(reason)) return "the vault couldn't release the dollars right now; please try again shortly";
   return reason;
 }

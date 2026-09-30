@@ -31,6 +31,11 @@ const lookupKey = derive("phone-lookup");
 const tagKey = derive("phone-tag");
 const codeKey = derive("verification-codes");
 
+/** Secret shared with the payment provider for signing deposit notifications. */
+export function paymentsWebhookSecret(): string {
+  return process.env.PAYMENTS_WEBHOOK_SECRET ?? derive("payments-webhook").toString("hex");
+}
+
 export function encryptPhone(e164: string): string {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", encryptionKey, iv);

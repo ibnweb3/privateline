@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Demo Bank: fund PrivateLine</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="wrap top">
+    <a class="brand" href="/" aria-label="PrivateLine home">
+      <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><path fill="var(--accent)" d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-7 5v-5H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z"/><rect fill="var(--surface)" x="8" y="10" width="16" height="2.4" rx="1.2"/><rect fill="var(--surface)" x="8" y="15" width="10" height="2.4" rx="1.2"/></svg>
+      PrivateLine
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/try">Try it</a>
+      <a href="/bank" aria-current="page">Demo bank</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/account">Account</a>
+    </nav>
+  </header>
+
+  <main class="wrap section" style="padding-top:8px">
+    <p class="eyebrow">Demo bank</p>
+    <h1 style="font-size:clamp(1.8rem,1.3rem + 2vw,2.6rem)">Fund PrivateLine from a bank account</h1>
+    <p class="lede" style="max-width:64ch">This page stands in for your bank app or a bank USSD code like <span class="sms">*737#</span>. Text <span class="sms">DEPOSIT</span> to get your personal deposit account number, send naira to it here, and PrivateLine credits dollars once 2 of 3 operators approve. No real money moves.</p>
+
+    <div class="grid two" style="margin-top:16px">
+      <section class="card" aria-labelledby="send-title">
+        <h2 id="send-title" style="font-size:1.2rem">Send a transfer</h2>
+        <form id="transfer" autocomplete="off">
+          <label for="to">To account number (from the DEPOSIT text)
+            <input id="to" name="toAccount" inputmode="numeric" pattern="\d{10}" maxlength="10" spellcheck="false" required>
+          </label>
+          <label for="amount">Amount in naira
+            <input id="amount" name="naira" type="number" min="100" max="5000000" step="1" inputmode="numeric" value="15000" required>
+            <span class="hint" id="rate-hint">Loading today's rate...</span>
+          </label>
+          <p class="error" role="alert"></p>
+          <button class="btn" type="submit">Send transfer</button>
+          <p class="note good" id="sent" hidden></p>
+        </form>
+      </section>
+
+      <section class="card" aria-labelledby="me-title">
+        <h2 id="me-title" style="font-size:1.2rem">Your bank account</h2>
+        <form id="me" autocomplete="off">
+          <label for="name">Account name
+            <input id="name" name="senderName" spellcheck="false" required>
+          </label>
+          <label for="bankname">Bank
+            <input id="bankname" name="senderBank" list="banks" spellcheck="false" required>
+            <datalist id="banks"><option>GTBank</option><option>Access Bank</option><option>Zenith Bank</option><option>First Bank</option><option>UBA</option><option>OPay</option><option>Moniepoint</option><option>Kuda</option></datalist>
+          </label>
+          <label for="acct">Account number
+            <input id="acct" name="senderAccount" inputmode="numeric" pattern="\d{10}" maxlength="10" spellcheck="false" required>
+            <span class="hint">Withdrawals from PrivateLine only go back to an account that funded it, so a stolen phone can't send money anywhere new.</span>
+          </label>
+        </form>
+        <h3 style="margin-top:18px">Statement</h3>
+        <ul class="list small" id="statement"><li class="muted">No transfers yet.</li></ul>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:16px" aria-labelledby="mainnet-title">
+      <h2 id="mainnet-title" style="font-size:1.2rem">On Canton MainNet (our next milestone)</h2>
+      <ol class="small" style="margin:0;padding-left:1.2em;display:grid;gap:6px">
+        <li>A Nigerian payment provider (for example Paystack, Flutterwave or Monnify) gives each user a real deposit account number, and notifies PrivateLine when naira lands. This demo uses the same notification format, signed the same way.</li>
+        <li>A licensed exchange (Busha and Quidax hold SEC Nigeria approval) converts naira to USDC. PrivateLine never swaps naira itself.</li>
+        <li>Circle xReserve mints the USDC as <strong>USDCx</strong> on Canton, into the vault. A float of USDCx lets deposits be credited instantly and refilled in daily batches.</li>
+        <li>Withdrawals run in reverse, and only to the user's own funding account.</li>
+      </ol>
+    </section>
+  </main>
+
+  <script type="module" src="/static/page-bank.js"></script>
+</body>
+</html>

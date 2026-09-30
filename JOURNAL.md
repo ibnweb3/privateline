@@ -322,3 +322,44 @@ That's about $141 for 30 days, and the credit ends around Oct 29, after the Oct 
 - Memory runs at about 5.3 of 15 GB.
 
 BitSafe's dashboard is reachable only through an SSH tunnel (`deploy/README.md`).
+
+## Funding — 2026-09-30 — naira in, naira out
+
+**The question:** how does someone in Nigeria put money into an SMS wallet? Can bank deposits
+become CC or cBTC?
+
+**The answer:** they become **dollars (USDCx on MainNet)**, not CC or cBTC:
+
+- CC and cBTC move with the market before the user has picked an investment.
+- CC transfers are public, which undoes the point of a private wallet.
+- USDCx is a CIP-56 token, so the vault holds it the same way it holds everything else.
+
+The real path is bank transfer or USSD → a per-user virtual account at a licensed payment provider
+→ a licensed exchange converts naira to USDC → Circle xReserve mints USDCx on Canton → the vault.
+The hackathon is too short to sign a payment provider and an exchange, so we built the whole loop
+against a demo bank, keeping the parts that don't change:
+
+- **Daml 0.3.0**, an upgrade of 0.2.0: `WithdrawProposal` (a `GovernableAction`),
+  `Account_Debit`, and `DemoFaucet_Burn`, which only burns holdings the desk and vault share.
+  `FundingTest` adds three tests: deposit then withdraw keeps the books balanced; you can't
+  withdraw more than you have; the desk can't burn the vault's dollars. 21 Daml tests pass.
+- **Payments webhook** in the format of Paystack's dedicated-virtual-account `charge.success`,
+  checked with HMAC-SHA512. The demo bank signs its notifications with the same secret and sends
+  them through the same code a real provider would reach. Each payment reference is credited
+  once, and failed deposits are retried every minute.
+- **Rates:** open.er-api.com, with a second source and a fixed fallback, plus a 1.5% spread each
+  way. Replies write naira as "N15,000", because ₦ isn't in the GSM-7 SMS alphabet.
+- **Withdrawals** go only to the bank account the user last deposited from, so a stolen phone
+  can't send money somewhere new. Both checkers refuse amounts over $500 or over the balance.
+- **Website:** a `/bank` page (the demo bank, with a statement), a funding card on the account
+  page, and `DEPOSIT` / `WITHDRAW 10` chips on the phone simulator.
+
+**Deployed and checked on the server.** DecMan distributed the 0.3.0 DAR to all three
+participants. Then `scripts/funding-e2e.ts` ran against the live site:
+
+- It signed up a phone, texted `DEPOSIT`, and sent N15,000 from the demo bank.
+- The credit text arrived 3.4 s later, after the 2-of-3 approval.
+- `WITHDRAW 5` and `YES <PIN>` paid N6,536 back to the same GTBank account in 3.0 s.
+
+After that, `settle.ts` still reports that the books balance: the vault's $205.97 equals the sum
+of all accounts.

@@ -9,7 +9,7 @@ import type { PriceFeed } from "./prices.ts";
 import {
   balancesOf, templates,
   type Account, type ChangePhoneProposal, type DepositProposal, type Fill, type OpenAccountProposal, type Quote,
-  type SettleProposal, type TradeProposal,
+  type SettleProposal, type TradeProposal, type WithdrawProposal,
 } from "./privateline.ts";
 
 export interface CheckerOptions {
@@ -97,6 +97,18 @@ export class Checker {
         return Number(proposal.amount) > policy.maxDeposit
           ? { ok: false, reason: `deposit over the $${policy.maxDeposit} cap` }
           : { ok: true, note: `deposit of $${proposal.amount}` };
+      }
+      case "PrivateLineWithdraw": {
+        const proposal = await this.find<WithdrawProposal>(templates.withdrawProposal, cid);
+        if (!proposal) return { wait: "proposal not visible yet" };
+        const amount = Number(proposal.amount);
+        if (amount > policy.maxWithdrawal) return { ok: false, reason: `withdrawal over the $${policy.maxWithdrawal} limit` };
+        const account = await this.find<Account>(templates.account, proposal.accountCid);
+        if (!account) return { ok: false, reason: "the account changed after this withdrawal was proposed" };
+        const cash = balancesOf(account).USD ?? 0;
+        return cash + 1e-10 < amount
+          ? { ok: false, reason: "the account doesn't hold enough dollars" }
+          : { ok: true, note: `withdraw $${amount} to ${proposal.payoutRef}` };
       }
       case "PrivateLineSettle": {
         const proposal = await this.find<SettleProposal>(templates.settleProposal, cid);

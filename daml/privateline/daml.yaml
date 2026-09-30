@@ -1,6 +1,6 @@
 sdk-version: 3.4.11
 name: privateline-v0
-version: 0.2.0
+version: 0.3.0
 source: daml
 dependencies:
   - daml-prim
@@ -11,7 +11,7 @@ data-dependencies:
   - ../dars/splice-api-token-metadata-v1-1.0.0.dar
 # The version already on LocalNet. The build checks that this one is a valid smart-contract
 # upgrade of it, so existing accounts keep working after the new DAR is distributed.
-upgrades: ../dars/privateline-v0-0.1.0.dar
+upgrades: ../dars/privateline-v0-0.2.0.dar
 build-options:
   - --target=2.2
   - --ghc-option=-Wunused-binds

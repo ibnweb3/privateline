@@ -34,6 +34,9 @@ reach.
 | `YES 4829` | `Done: bought 0.00482 oz Gold for $20.00 at $4,145.59/oz. Cash $80.00. Ref TEA5E` |
 | `SELL GOLD ALL` | *(after YES + PIN, with Cantex's gold price 1.69% under the market)* `Not done: Gold costs 1.69% less on Canton than on the market right now, so our independent price checkers refused it. No money moved.` |
 | `ALERT BTC 1` | Later: `PrivateLine alert: Bitcoin is up 2.0% to $83,395/BTC since $81,727.` |
+| `DEPOSIT` | `To add money, send naira to PrivateLine Demo Bank, account 9981131079 (PrivateLine pl-a855), from your bank app or USSD. Rate: N1,347 = $1. We'll text you when it lands.` |
+| *(N15,000 arrives)* | `Received N15,000 = $11.13 at N1,347/$. Cash $111.13. Text BUY GOLD 10 to invest.` |
+| `WITHDRAW 5` | `Withdraw $5.00 = N6,536 (N1,307/$) to GTBank ****9954 (ADA OKAFOR)? Reply YES and your PIN within 2 min, NO to cancel. Ref W9FE9` |
 | `LOCK` | Freezes the account until you unlock it on the website with your email. |
 
 Assets: S&P 500 (SPYe), Nasdaq 100 (QQQe), gold (eXAU), silver (eXAG), bitcoin (cBTC) and ether
@@ -115,7 +118,10 @@ never conflict.
 
 ## Safety
 
-- **2 of 3 operators for every money move:** opening an account, deposits, trades and settlements.
+- **2 of 3 operators for every money move:** opening an account, deposits, trades, withdrawals
+  and settlements.
+- **Withdrawals go only to the bank account that funded the wallet.** A stolen phone can't send
+  money anywhere new, and every withdrawal still needs the PIN, both checkers' limits, and 2 of 3.
 - **Price integrity.** Both checkers refuse trades priced more than 1.5% against the user compared
   with the real market. This happened live: on 2026-09-29, Cantex's gold bid sat 1.69% under the
   market price, and `SELL GOLD ALL` was refused.
@@ -131,6 +137,49 @@ never conflict.
 - **`LOCK` by text.** Only the website, reached by email sign-in, unlocks.
 - **Stale data fails safely.** A proposal whose account changed underneath it fails at execution.
   It never acts on old balances.
+
+## Adding and withdrawing money
+
+People in Nigeria pay by bank transfer and USSD, so that's how money comes in. Naira is converted
+to **dollars**, not to CC or cBTC. Deposits should hold their value until the user chooses an
+investment, and a CC transfer is public on the ledger, which a private wallet shouldn't need.
+
+**The demo, live now.** Try it at [/try](https://20.91.214.194.sslip.io/try) and
+[/bank](https://20.91.214.194.sslip.io/bank).
+
+1. Text `DEPOSIT`. PrivateLine replies with a personal deposit account number and today's rate:
+   the market rate from open.er-api.com plus a 1.5% exchange spread.
+2. Send naira from the **demo bank** page, which stands in for a bank app or a `*737#` USSD code.
+   The demo bank sends a signed payment notification to `POST /payments/webhook`. It uses the
+   format a Nigerian payment provider sends for a dedicated virtual account (Paystack's
+   `charge.success`, signed with HMAC-SHA512).
+3. PrivateLine verifies the signature and matches the account number to the user. It then
+   proposes a `DepositProposal`, and the dollars are credited once 2 of 3 operators approve.
+   About 3 seconds from transfer to text. Each payment reference is credited once, however many
+   times the notification arrives. A deposit that fails is retried every minute.
+4. `WITHDRAW 5`, then `YES <PIN>`, proposes a `WithdrawProposal`. Both checkers look at the
+   amount (up to $500) and the balance. With 2 of 3, the contract:
+   - debits the account;
+   - burns the vault's dollars with the desk;
+   - sends the naira to the bank account the user last deposited from, and to no other account.
+
+**Next milestone: real money on Canton MainNet.** Each demo piece has a real counterpart, and the
+webhook already takes the real format:
+
+| Demo | MainNet |
+|---|---|
+| Demo bank account number per user | A dedicated virtual account per user from a licensed Nigerian payment provider: Paystack, Flutterwave or Monnify. |
+| Rate from open.er-api.com | A quote from a licensed exchange. Busha and Quidax hold SEC Nigeria approval-in-principle as digital asset exchanges. It converts naira to USDC; PrivateLine never swaps naira itself. |
+| Desk mints demo dollars | Circle's xReserve turns the USDC into **USDCx** on Canton, into the vault. Deposits are credited instantly from a float of USDCx, and the float is refilled in daily batches. |
+| Desk burns demo dollars | USDCx back to USDC, back to naira, paid out by the payment provider to the user's own funding account. |
+
+The Daml side doesn't change shape. `DepositProposal` and `WithdrawProposal` already move a
+CIP-56 holding in and out of the vault 2 of 3, and USDCx is a CIP-56 token. What's left is
+business, not code:
+
+- the payment-provider account and the exchange partnership;
+- KYC tiers matched to the provider's limits;
+- a funded float.
 
 ## Run it
 
@@ -148,7 +197,7 @@ You need:
    - `./hackathon/seed.sh` (member parties and governance DARs);
    - then `scripts/dev/localnet-vault.sh` from this repo, which creates `privateline-vault`
      (3 nodes, threshold 2).
-2. **Contracts:** `scripts/dev/daml-test.sh` builds the DAR and runs the 18 Daml tests.
+2. **Contracts:** `scripts/dev/daml-test.sh` builds the DAR and runs the 21 Daml tests.
 3. **App:** from `app/`, run:
    - `npm install`;
    - `npm run localnet:setup`, which distributes the DAR through DecMan (node 1 proposes, nodes 2
@@ -171,6 +220,7 @@ Settings are listed in [`app/.env.example`](app/.env.example).
 | Refusing an off-market trade (a recorded drift) | `PRICE_MODE=replay npm run demo:approval -- cETH 20` replays Cantex at 2026-09-26 06:38 UTC, when cETH traded 2.34% over ETH. Both checkers refuse, and the refusals are on the ledger. |
 | SIM-swap protection | `node scripts/phone-change-demo.ts <email> <old +999> <new +999>` with a 120-second cooldown in `app/.env`. |
 | Privacy | `/privacy` while signed in. Also `daml/privateline-test/.../PrivacyTest.daml`. |
+| Money in and out | Text `DEPOSIT`, send naira from `/bank`, then `WITHDRAW 5` and `YES <PIN>`. Or run `BASE_URL=<url> node scripts/funding-e2e.ts`. The demo bank statement shows both legs. |
 | Books balance | `npm run demo:settle`: after net settlement the vault's tokens equal the sum of all accounts. |
 
 ## Real SMS
@@ -191,21 +241,21 @@ project. PrivateLine runs its own gateway phone with a dedicated SIM. Setup is i
 daml/privateline/        Daml contracts (package privateline-v0)
   PrivateLine/Account     one private account per user
   PrivateLine/Holding     demo tokens, CIP-56 Holding
-  PrivateLine/Desk        quotes, fills, net settlement, demo faucet
-  PrivateLine/Actions     GovernableAction proposals: open account, deposit, trade, settle, change phone
+  PrivateLine/Desk        quotes, fills, net settlement, demo faucet (mint and burn)
+  PrivateLine/Actions     GovernableAction proposals: open account, deposit, trade, settle, change phone, withdraw
   PrivateLine/Checks      CheckRefusal
-daml/privateline-test/   18 Daml Script tests (trades, limits, 2 of 3, privacy, settlement, safety)
+daml/privateline-test/   21 Daml Script tests (trades, limits, 2 of 3, privacy, settlement, safety, funding)
 daml/dars/               BitSafe's governance DARs and the CIP-56 API DARs we build against
 app/src/                 service: ledger + DecMan clients, operator, checkers, desk, prices, SMS, web API
-app/web/                 website: home, try (phone simulator), sign-up, sign-in, account, privacy
-app/test/                19 unit tests (commands, price rules, webhook signatures, crypto)
+app/web/                 website: home, try (phone simulator), demo bank, sign-up, sign-in, account, privacy
+app/test/                23 unit tests (commands, price rules, webhook signatures, crypto, funding)
 app/scripts/             LocalNet setup and demo scripts
 scripts/dev/             Windows/WSL setup helpers
 ```
 
 ## Tests
 
-- **Daml:** `scripts/dev/daml-test.sh` runs 18 tests. They cover:
+- **Daml:** `scripts/dev/daml-test.sh` runs 21 tests. They cover:
   - one operator can't act;
   - buy and sell;
   - the daily limit and its reset;
@@ -214,17 +264,22 @@ scripts/dev/             Windows/WSL setup helpers
   - stale accounts;
   - three privacy tests;
   - three settlement tests;
-  - phone-change cooldown and checker refusal.
-- **App:** `npm test` (19 unit tests) and `npm run check` (types).
+  - phone-change cooldown and checker refusal;
+  - deposit then withdraw keeps the books balanced, no withdrawing more than the balance, and the
+    desk can't burn the vault's dollars.
+- **App:** `npm test` (23 unit tests) and `npm run check` (types).
 - **End to end, against a running app:**
   - `npm run e2e` signs up and texts a full conversation;
+  - `node scripts/funding-e2e.ts` deposits naira from the demo bank and withdraws back to it;
   - `node scripts/phone-change-demo.ts`.
 
 ## Limits
 
 - LocalNet only. Balances are demo dollars and demo mirror tokens: the desk mints and redeems them
   at Cantex prices. On MainNet the desk leg would be a Cantex swap of the real tokens, and deposits
-  and withdrawals would be USDCx transfers.
+  and withdrawals would be USDCx transfers (see
+  [Adding and withdrawing money](#adding-and-withdrawing-money)).
+- The bank is a demo: no real naira moves, and the exchange rate is a public reference rate.
 - Email delivery is simulated: sign-in codes are shown on screen.
 - One pending action per account. That's by design: contract ids are resolved at execution.
 

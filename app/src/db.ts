@@ -114,7 +114,55 @@ create table if not exists inbound (
   msg_id text primary key,
   at integer not null
 );
+create table if not exists virtual_accounts (
+  account_number text primary key,
+  user_id text not null unique
+);
+create table if not exists funding_sources (
+  user_id text not null,
+  bank text not null,
+  account_number text not null,
+  name text not null,
+  last_used integer not null,
+  primary key (user_id, bank, account_number)
+);
+create table if not exists deposits (
+  reference text primary key,
+  user_id text not null,
+  naira real not null,
+  dollars real not null,
+  rate real not null,
+  status text not null,
+  at integer not null
+);
+create table if not exists demo_bank (
+  id integer primary key autoincrement,
+  account_number text not null,
+  direction text not null,
+  counterparty text not null,
+  naira real not null,
+  reference text not null,
+  at integer not null
+);
 `;
+
+export interface FundingSource {
+  user_id: string;
+  bank: string;
+  account_number: string;
+  name: string;
+  last_used: number;
+}
+
+export interface Deposit {
+  reference: string;
+  user_id: string;
+  naira: number;
+  dollars: number;
+  rate: number;
+  status: string;
+  at: number;
+}
 
 export class Db {
   private readonly db: DatabaseSync;
@@ -291,6 +339,56 @@ export class Db {
 
   deletePhoneChange(userId: string): void {
     this.run("delete from phone_changes where user_id = ?", userId);
+  }
+
+  // Funding: virtual accounts, the bank accounts that funded each user, deposits, the demo bank
+
+  virtualAccount(userId: string): string | undefined {
+    return this.get<{ account_number: string }>("select account_number from virtual_accounts where user_id = ?", userId)?.account_number;
+  }
+
+  putVirtualAccount(accountNumber: string, userId: string): void {
+    this.run("insert into virtual_accounts (account_number, user_id) values (?, ?)", accountNumber, userId);
+  }
+
+  userByVirtualAccount(accountNumber: string): User | undefined {
+    return this.get("select users.* from virtual_accounts join users on users.id = virtual_accounts.user_id where account_number = ?", accountNumber);
+  }
+
+  putFundingSource(source: FundingSource): void {
+    this.run(
+      `insert into funding_sources (user_id, bank, account_number, name, last_used) values (?, ?, ?, ?, ?)
+       on conflict (user_id, bank, account_number) do update set name = excluded.name, last_used = excluded.last_used`,
+      source.user_id, source.bank, source.account_number, source.name, source.last_used);
+  }
+
+  /** The bank account that most recently funded this user: the only place withdrawals go. */
+  payoutAccount(userId: string): FundingSource | undefined {
+    return this.get("select * from funding_sources where user_id = ? order by last_used desc limit 1", userId);
+  }
+
+  deposit(reference: string): Deposit | undefined {
+    return this.get("select * from deposits where reference = ?", reference);
+  }
+
+  putDeposit(deposit: Deposit): void {
+    this.run(
+      `insert into deposits (reference, user_id, naira, dollars, rate, status, at) values (?, ?, ?, ?, ?, ?, ?)
+       on conflict (reference) do update set status = excluded.status`,
+      deposit.reference, deposit.user_id, deposit.naira, deposit.dollars, deposit.rate, deposit.status, deposit.at);
+  }
+
+  depositsWithStatus(status: string): Deposit[] {
+    return this.all("select * from deposits where status = ? order by at", status);
+  }
+
+  addDemoBankEntry(entry: { account_number: string; direction: "in" | "out"; counterparty: string; naira: number; reference: string }): void {
+    this.run("insert into demo_bank (account_number, direction, counterparty, naira, reference, at) values (?, ?, ?, ?, ?, ?)",
+      entry.account_number, entry.direction, entry.counterparty, entry.naira, entry.reference, Date.now());
+  }
+
+  demoBankStatement(accountNumber: string): { direction: string; counterparty: string; naira: number; reference: string; at: number }[] {
+    return this.all("select direction, counterparty, naira, reference, at from demo_bank where account_number = ? order by id desc limit 30", accountNumber);
   }
 
   // Webhook de-duplication (gateways retry)

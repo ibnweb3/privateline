@@ -7,7 +7,7 @@ dependencies:
   - daml-stdlib
   - daml-script
 data-dependencies:
-  - ../privateline/.daml/dist/privateline-v0-0.2.0.dar
+  - ../privateline/.daml/dist/privateline-v0-0.3.0.dar
   - ../dars/governance-action-v1-0.1.0.dar
   - ../dars/governance-core-v1-0.1.0.dar
   - ../dars/splice-api-token-holding-v1-1.0.0.dar

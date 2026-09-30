@@ -10,6 +10,7 @@ export interface Policy {
   maxStartingDollars: number;
   maxDailyLimit: number;
   maxDeposit: number;
+  maxWithdrawal: number;
   /** Shortest cooldown a checker accepts on a phone change, in seconds. */
   minPhoneChangeCooldownSeconds: number;
 }
@@ -22,6 +23,7 @@ export function policyFromEnv(): Policy {
     maxStartingDollars: number("MAX_STARTING_DOLLARS", 100),
     maxDailyLimit: number("MAX_DAILY_LIMIT", 1000),
     maxDeposit: number("MAX_DEPOSIT", 1000),
+    maxWithdrawal: number("MAX_WITHDRAWAL", 500),
     minPhoneChangeCooldownSeconds: number("PHONE_CHANGE_COOLDOWN_SECONDS", 24 * 3600),
   };
 }

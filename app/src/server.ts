@@ -9,6 +9,8 @@ import { fileURLToPath } from "node:url";
 
 import { UserError, type PrivateLine } from "./app.ts";
 import type { User } from "./db.ts";
+import { nairaRates } from "./fx.ts";
+import { BadPaymentSignatureError, parsePaymentEvent } from "./payments.ts";
 import { ASSETS } from "./prices.ts";
 import { BadSignatureError, isSimulatorPhone, parseSmsGateWebhook, type SimulatorGateway } from "./sms/gateway.ts";
 import { normalizeE164 } from "./sms/phone.ts";
@@ -34,6 +36,7 @@ const PAGES: Record<string, string> = {
   "/account": "account.html",
   "/privacy": "privacy.html",
   "/try": "try.html",
+  "/bank": "bank.html",
 };
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -128,7 +131,7 @@ export function startServer(options: ServerOptions): void {
     rateLimit(client, "api");
     if (path === "/api/signup/start" || path === "/api/signin/start" || path === "/api/signup/phone" || path === "/api/me/phone") rateLimit(client, "code");
     if (path === "/api/signup/finish") rateLimit(client, "account");
-    if (path === "/api/sim/send") rateLimit(client, "text");
+    if (path === "/api/sim/send" || path === "/api/demo-bank/transfer") rateLimit(client, "text");
     const body = method === "POST" ? JSON.parse((await readBody(request)) || "{}") as Record<string, unknown> : {};
 
     if (method === "GET" && path === "/api/status") return json(response, 200, options.status());
@@ -181,6 +184,16 @@ export function startServer(options: ServerOptions): void {
           return json(response, 200, await app.requestPhoneChange(requireUser(request), field(body, "phone")));
         case "/api/me/phone/confirm":
           return json(response, 200, await app.confirmPhoneChange(requireUser(request), field(body, "code")));
+        case "/api/demo-bank/transfer": {
+          const amount = Number(body.naira);
+          return json(response, 200, await app.demoBankTransfer({
+            toAccount: field(body, "toAccount").trim(),
+            naira: amount,
+            senderBank: field(body, "senderBank").trim().slice(0, 40),
+            senderAccount: field(body, "senderAccount").trim(),
+            senderName: field(body, "senderName").trim().toUpperCase().slice(0, 60),
+          }));
+        }
         case "/api/sim/send": {
           const phone = normalizeE164(field(body, "phone"));
           if (!isSimulatorPhone(phone)) throw new UserError("The simulator only uses +999 numbers.");
@@ -197,6 +210,12 @@ export function startServer(options: ServerOptions): void {
           return json(response, 200, await app.accountView(requireUser(request)));
         case "/api/privacy":
           return json(response, 200, await app.privacyView(requireUser(request)));
+        case "/api/fx":
+          return json(response, 200, await nairaRates());
+        case "/api/demo-bank/statement": {
+          const url = new URL(request.url ?? "/", "http://localhost");
+          return json(response, 200, { entries: app.demoBankStatement(url.searchParams.get("account") ?? "") });
+        }
         case "/api/sim/messages": {
           const url = new URL(request.url ?? "/", "http://localhost");
           const phone = normalizeE164(url.searchParams.get("phone") ?? "");
@@ -219,6 +238,19 @@ export function startServer(options: ServerOptions): void {
       if (sms) void app.receive(sms);
     } catch (error) {
       if (error instanceof BadSignatureError) return json(response, 403, { error: "bad signature" });
+      throw error;
+    }
+  };
+
+  /** Deposit notifications from the payment provider (Paystack-style `charge.success`, HMAC-SHA512 signed). */
+  const handlePaymentWebhook = async (request: IncomingMessage, response: ServerResponse): Promise<void> => {
+    const raw = await readBody(request);
+    try {
+      const transfer = parsePaymentEvent(raw, request.headers["x-paystack-signature"] as string | undefined, app.options.paymentsSecret);
+      json(response, 200, { ok: true });
+      if (transfer) void app.receivePayment(transfer).catch((error: unknown) => log(`payment failed: ${error instanceof Error ? error.message : error}`));
+    } catch (error) {
+      if (error instanceof BadPaymentSignatureError) return json(response, 403, { error: "bad signature" });
       throw error;
     }
   };
@@ -250,7 +282,9 @@ export function startServer(options: ServerOptions): void {
       ? handleApi(request, response, path)
       : path === "/sms/webhook" && request.method === "POST"
         ? handleWebhook(request, response)
-        : serveStatic(response, path);
+        : path === "/payments/webhook" && request.method === "POST"
+          ? handlePaymentWebhook(request, response)
+          : serveStatic(response, path);
     work.catch((error: unknown) => {
       if (response.headersSent) return;
       if (error instanceof RateLimitError) return json(response, 429, { error: error.message });

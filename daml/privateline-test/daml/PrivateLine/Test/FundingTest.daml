@@ -1,0 +1,74 @@
+-- | Money in and out: deposits mint dollars into the vault and credit the account; withdrawals
+-- debit the account and burn the vault's dollars. Both need 2 of 3 operators, and the vault's
+-- tokens always equal the accounts.
+module PrivateLine.Test.FundingTest where
+
+import DA.Assert ((===))
+import qualified DA.Map as Map
+import Daml.Script
+
+import PrivateLine.Actions
+import PrivateLine.Desk
+import PrivateLine.Holding
+import PrivateLine.Types
+
+import PrivateLine.Test.Setup
+
+vaultDollars : World -> Script (Decimal, [ContractId DemoHolding])
+vaultDollars w = do
+  holdings <- query @DemoHolding w.vault
+  let dollars = filter (\(_, holding) -> holding.symbol == dollar) holdings
+  pure (sum (map (\(_, holding) -> holding.amount) dollars), map fst dollars)
+
+withdraw : World -> Text -> Decimal -> Script (ContractId WithdrawProposal)
+withdraw w accountId amount = do
+  accountCid <- findAccount w.alice accountId
+  (_, holdings) <- vaultDollars w
+  submit w.operator $ createCmd WithdrawProposal with
+    vault = w.vault
+    proposer = w.operator
+    faucetCid = w.faucetCid
+    accountCid
+    accountId
+    amount
+    vaultHoldings = holdings
+    payoutRef = "GTBank ****5678"
+
+-- | A deposit then a withdrawal: the account and the vault's dollars move together.
+test_deposit_then_withdraw_keeps_books_balanced : Script ()
+test_deposit_then_withdraw_keeps_books_balanced = do
+  w <- setup
+  accountCid <- openAccount w w.alice "a1" 500.0 100.0
+  deposit <- submit w.operator $ createCmd DepositProposal with
+    vault = w.vault
+    proposer = w.operator
+    faucetCid = w.faucetCid
+    accountCid
+    accountId = "a1"
+    amount = 11.3
+  _ <- approve w (toInterfaceContractId deposit)
+  proposal <- withdraw w "a1" 30.0
+  _ <- approve w (toInterfaceContractId proposal)
+  after <- findAccount w.alice "a1"
+  balances <- balancesOf w.alice after
+  balances === Map.fromList [(dollar, 81.3)]
+  (tokens, _) <- vaultDollars w
+  tokens === 81.3
+
+-- | A user cannot withdraw more than they hold, even with 2 of 3 approvals.
+test_cannot_withdraw_more_than_balance : Script ()
+test_cannot_withdraw_more_than_balance = do
+  w <- setup
+  _ <- openAccount w w.alice "a1" 500.0 100.0
+  proposal <- withdraw w "a1" 150.0
+  approveMustFail w (toInterfaceContractId proposal) "not enough USD"
+
+-- | Only the vault can burn its dollars; the desk cannot take them on its own.
+test_desk_cannot_burn_vault_dollars : Script ()
+test_desk_cannot_burn_vault_dollars = do
+  w <- setup
+  _ <- openAccount w w.alice "a1" 500.0 100.0
+  (_, holdings) <- vaultDollars w
+  submitMustFail w.desk $ exerciseCmd w.faucetCid DemoFaucet_Burn with
+    amount = 10.0
+    vaultHoldings = holdings

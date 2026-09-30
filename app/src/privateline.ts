@@ -15,6 +15,7 @@ export const templates = {
   tradeProposal: `${pkg}:PrivateLine.Actions:TradeProposal`,
   settleProposal: `${pkg}:PrivateLine.Actions:SettleProposal`,
   changePhoneProposal: `${pkg}:PrivateLine.Actions:ChangePhoneProposal`,
+  withdrawProposal: `${pkg}:PrivateLine.Actions:WithdrawProposal`,
   checkRefusal: `${pkg}:PrivateLine.Checks:CheckRefusal`,
   governableAction: "#governance-action-v1:Governance.Action:GovernableAction",
   governanceRules: "#governance-core-v1:Governance.Rules:GovernanceRules",
@@ -88,6 +89,14 @@ export interface DepositProposal {
   accountCid: string;
   accountId: string;
   amount: string;
+}
+
+export interface WithdrawProposal {
+  accountCid: string;
+  accountId: string;
+  amount: string;
+  vaultHoldings: string[];
+  payoutRef: string;
 }
 
 export interface SettleProposal {

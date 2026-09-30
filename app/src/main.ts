@@ -10,6 +10,7 @@ import { Desk } from "./desk.ts";
 import { decman, ledgers, loadDeployment } from "./localnet.ts";
 import { Operator } from "./operator.ts";
 import { feedFromEnv } from "./prices.ts";
+import { paymentsWebhookSecret } from "./secrets.ts";
 import { startServer } from "./server.ts";
 import { RoutingGateway, SimulatorGateway, SmsGateGateway } from "./sms/gateway.ts";
 
@@ -44,6 +45,7 @@ const app = new PrivateLine({
   dailyLimit: Number(env.DAILY_LIMIT ?? 200),
   phoneChangeCooldownSeconds,
   emailMode: "dev",
+  paymentsSecret: paymentsWebhookSecret(),
   log,
 });
 
