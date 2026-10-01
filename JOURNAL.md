@@ -387,3 +387,27 @@ Details that mattered:
 Checked: `funding-e2e.ts` passed through the new address (deposit credited in 2.7 s, withdrawal
 in 2.9 s). A packet capture on the server showed the proxied request carrying the right key and
 the visitor's real address.
+
+## Feedback form — 2026-10-01 — evidence from real people
+
+The hackathon's Metrics step asks for conversations and tests with real users. When we filled it in,
+the live server held 3 accounts, all from our own test runs. So we added the way to collect real
+evidence: an anonymous feedback form at `/feedback`, linked from the nav and from the Try page.
+
+- **Six short questions.** Who are you (trader or shop owner, salaried, student, builder, other),
+  which phone, would you use it (yes, maybe, no), what first amount, what worries you most, and an
+  optional note. Only the first and third are required.
+- **Nothing identifies the person.** No name, email or phone number, and no account id. A row holds
+  the answers, a timestamp and whether they came from the Try page. The privacy page says so.
+- **Counts are public, notes are private.** `/api/feedback/summary` returns counts only, including
+  the "would you use it" split among traders and shop owners (our first customer). The notes are
+  read on the server with `node scripts/feedback-report.ts`. A comment is stored as plain text and
+  never sent back to a browser.
+- **Rate limited** to 10 submissions an hour per visitor, through the same front-door address
+  handling as the rest of the site.
+- **A test keeps the form and the server in step.** It reads the radio values out of
+  `feedback.html` and checks they are exactly the choices the server accepts, so a renamed option
+  can't quietly start failing.
+- Checked on a 375 px phone width: no sideways scroll, 44-48 px tap targets, 16 px text so iOS
+  doesn't zoom. Then through the public address: bad answers get a 400 with a plain message, a good
+  one is stored, and I deleted my own test row so the table started empty.

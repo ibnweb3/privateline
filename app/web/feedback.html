@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Feedback · PrivateLine</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="wrap top">
+    <a class="brand" href="/" aria-label="PrivateLine home">
+      <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true"><path fill="var(--accent)" d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-7 5v-5H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z"/><rect fill="var(--surface)" x="8" y="10" width="16" height="2.4" rx="1.2"/><rect fill="var(--surface)" x="8" y="15" width="10" height="2.4" rx="1.2"/></svg>
+      PrivateLine
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="/">Home</a>
+      <a href="/try">Try it</a>
+      <a href="/bank">Demo bank</a>
+      <a href="/privacy">Privacy</a>
+      <a href="/feedback" aria-current="page">Feedback</a>
+      <a href="/signup">Sign up</a>
+    </nav>
+  </header>
+
+  <main class="narrow section" style="padding-top:8px">
+    <p class="eyebrow">Feedback</p>
+    <h1 style="font-size:clamp(1.8rem,1.3rem + 2vw,2.4rem)">Tell us what you think</h1>
+    <p class="muted">It takes about a minute and it's anonymous. We don't ask for your name, email or phone number. Your answers decide what we build next.</p>
+
+    <form id="feedback-form" class="card">
+      <input type="hidden" id="source" name="source" value="direct">
+
+      <fieldset>
+        <legend>Which describes you best?</legend>
+        <label class="choice"><input type="radio" name="who" value="trader" required> I run a stall, shop or small business</label>
+        <label class="choice"><input type="radio" name="who" value="salaried"> I have a salaried job</label>
+        <label class="choice"><input type="radio" name="who" value="student"> I'm a student</label>
+        <label class="choice"><input type="radio" name="who" value="builder"> I'm a developer or hackathon participant</label>
+        <label class="choice"><input type="radio" name="who" value="other"> Something else</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Which phone do you use most? <span class="hint">Optional</span></legend>
+        <label class="choice"><input type="radio" name="phone" value="basic"> A basic phone (calls and texts)</label>
+        <label class="choice"><input type="radio" name="phone" value="smartphone"> A smartphone</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Would you use PrivateLine to buy gold, US stocks or bitcoin?</legend>
+        <label class="choice"><input type="radio" name="would_use" value="yes" required> Yes</label>
+        <label class="choice"><input type="radio" name="would_use" value="maybe"> Maybe</label>
+        <label class="choice"><input type="radio" name="would_use" value="no"> No</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>What's the first amount you would try? <span class="hint">Optional</span></legend>
+        <label class="choice"><input type="radio" name="amount" value="under5k"> Under ₦5,000</label>
+        <label class="choice"><input type="radio" name="amount" value="5k-20k"> ₦5,000 to ₦20,000</label>
+        <label class="choice"><input type="radio" name="amount" value="20k-100k"> ₦20,000 to ₦100,000</label>
+        <label class="choice"><input type="radio" name="amount" value="over100k"> More than ₦100,000</label>
+        <label class="choice"><input type="radio" name="amount" value="none"> I wouldn't use it</label>
+      </fieldset>
+
+      <fieldset>
+        <legend>What worries you most? <span class="hint">Optional</span></legend>
+        <label class="choice"><input type="radio" name="worry" value="trust"> Trusting a company with my money</label>
+        <label class="choice"><input type="radio" name="worry" value="cost"> The fees and the exchange rate</label>
+        <label class="choice"><input type="radio" name="worry" value="signup"> Signing up</label>
+        <label class="choice"><input type="radio" name="worry" value="language"> The commands are only in English</label>
+        <label class="choice"><input type="radio" name="worry" value="unclear"> I'm not sure how it works</label>
+        <label class="choice"><input type="radio" name="worry" value="nothing"> Nothing worries me</label>
+      </fieldset>
+
+      <label for="comment">Anything else you'd like us to know? <span class="hint">Optional</span>
+        <textarea id="comment" name="comment" maxlength="500" rows="4"></textarea>
+      </label>
+
+      <p class="error" role="alert"></p>
+      <button class="btn" type="submit">Send feedback</button>
+    </form>
+
+    <section class="card" id="thanks" hidden aria-live="polite">
+      <h2 style="font-size:1.3rem">Thank you</h2>
+      <p class="muted" id="thanks-total"></p>
+      <ul class="list small" id="thanks-list"></ul>
+      <div class="actions">
+        <a class="btn" href="/try">Back to the demo</a>
+        <a class="btn secondary" href="/">Home</a>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">Demo on BitSafe's Decentralization Manager LocalNet. Demo dollars and demo mirror tokens only. Feedback is stored without your name, email or phone number.</div>
+  </footer>
+
+  <script type="module" src="/static/page-feedback.js"></script>
+</body>
+</html>

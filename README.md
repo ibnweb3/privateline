@@ -248,8 +248,8 @@ daml/privateline/        Daml contracts (package privateline-v0)
 daml/privateline-test/   21 Daml Script tests (trades, limits, 2 of 3, privacy, settlement, safety, funding)
 daml/dars/               BitSafe's governance DARs and the CIP-56 API DARs we build against
 app/src/                 service: ledger + DecMan clients, operator, checkers, desk, prices, SMS, web API
-app/web/                 website: home, try (phone simulator), demo bank, sign-up, sign-in, account, privacy
-app/test/                25 unit tests (commands, price rules, webhook signatures, crypto, funding, proxy)
+app/web/                 website: home, try (phone simulator), demo bank, feedback, sign-up, sign-in, account, privacy
+app/test/                32 unit tests (commands, price rules, webhook signatures, crypto, funding, proxy, feedback)
 app/scripts/             LocalNet setup and demo scripts
 scripts/dev/             Windows/WSL setup helpers
 ```
@@ -268,10 +268,11 @@ scripts/dev/             Windows/WSL setup helpers
   - phone-change cooldown and checker refusal;
   - deposit then withdraw keeps the books balanced, no withdrawing more than the balance, and the
     desk can't burn the vault's dollars.
-- **App:** `npm test` (25 unit tests) and `npm run check` (types).
+- **App:** `npm test` (32 unit tests) and `npm run check` (types).
 - **End to end, against a running app:**
   - `npm run e2e` signs up and texts a full conversation;
   - `node scripts/funding-e2e.ts` deposits naira from the demo bank and withdraws back to it;
+  - `node scripts/feedback-report.ts` prints what testers said in the anonymous feedback form (`/feedback`).
   - `node scripts/phone-change-demo.ts`.
 
 ## Limits

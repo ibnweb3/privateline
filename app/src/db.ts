@@ -1,11 +1,14 @@
 // The off-ledger database (SQLite, built into Node). It holds what must never go on a ledger:
 // the link between a phone number (encrypted) and an account, the PIN hash, verification codes,
-// sessions, pending SMS confirmations, alert subscriptions and a short activity log.
+// sessions, pending SMS confirmations, alert subscriptions and a short activity log. It also holds
+// anonymous feedback answers, with nothing that identifies who gave them.
 
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+
+import type { Feedback, FeedbackRow } from "./feedback.ts";
 
 export interface User {
   id: string;
@@ -143,6 +146,17 @@ create table if not exists demo_bank (
   naira real not null,
   reference text not null,
   at integer not null
+);
+create table if not exists feedback (
+  id integer primary key autoincrement,
+  at integer not null,
+  who text not null,
+  phone text,
+  would_use text not null,
+  amount text,
+  worry text,
+  comment text,
+  source text not null
 );
 `;
 
@@ -389,6 +403,18 @@ export class Db {
 
   demoBankStatement(accountNumber: string): { direction: string; counterparty: string; naira: number; reference: string; at: number }[] {
     return this.all("select direction, counterparty, naira, reference, at from demo_bank where account_number = ? order by id desc limit 30", accountNumber);
+  }
+
+  // Feedback (anonymous)
+
+  addFeedback(feedback: Feedback, at: number): void {
+    this.run(
+      "insert into feedback (at, who, phone, would_use, amount, worry, comment, source) values (?, ?, ?, ?, ?, ?, ?, ?)",
+      at, feedback.who, feedback.phone, feedback.would_use, feedback.amount, feedback.worry, feedback.comment, feedback.source);
+  }
+
+  allFeedback(): FeedbackRow[] {
+    return this.all("select * from feedback order by id");
   }
 
   // Webhook de-duplication (gateways retry)

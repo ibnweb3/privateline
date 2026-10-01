@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 
 import { UserError, type PrivateLine } from "./app.ts";
 import type { User } from "./db.ts";
+import { FeedbackError, parseFeedback, summarize } from "./feedback.ts";
 import { nairaRates } from "./fx.ts";
 import { BadPaymentSignatureError, parsePaymentEvent } from "./payments.ts";
 import { ASSETS } from "./prices.ts";
@@ -37,6 +38,7 @@ const PAGES: Record<string, string> = {
   "/privacy": "privacy.html",
   "/try": "try.html",
   "/bank": "bank.html",
+  "/feedback": "feedback.html",
 };
 const TYPES: Record<string, string> = {
   ".html": "text/html; charset=utf-8",
@@ -54,6 +56,7 @@ const LIMITS: Record<string, { max: number; windowMs: number }> = {
   code: { max: 10, windowMs: 3600_000 },
   account: { max: 5, windowMs: 3600_000 },
   text: { max: 30, windowMs: 60_000 },
+  feedback: { max: 10, windowMs: 3600_000 },
   api: { max: 300, windowMs: 60_000 },
 };
 const hits = new Map<string, { count: number; resetAt: number }>();
@@ -146,6 +149,7 @@ export function startServer(options: ServerOptions): void {
     if (path === "/api/signup/start" || path === "/api/signin/start" || path === "/api/signup/phone" || path === "/api/me/phone") rateLimit(client, "code");
     if (path === "/api/signup/finish") rateLimit(client, "account");
     if (path === "/api/sim/send" || path === "/api/demo-bank/transfer") rateLimit(client, "text");
+    if (path === "/api/feedback") rateLimit(client, "feedback");
     const body = method === "POST" ? JSON.parse((await readBody(request)) || "{}") as Record<string, unknown> : {};
 
     if (method === "GET" && path === "/api/status") return json(response, 200, options.status());
@@ -208,6 +212,10 @@ export function startServer(options: ServerOptions): void {
             senderName: field(body, "senderName").trim().toUpperCase().slice(0, 60),
           }));
         }
+        case "/api/feedback": {
+          app.options.db.addFeedback(parseFeedback(body), Date.now());
+          return json(response, 200, { ok: true, summary: summarize(app.options.db.allFeedback()) });
+        }
         case "/api/sim/send": {
           const phone = normalizeE164(field(body, "phone"));
           if (!isSimulatorPhone(phone)) throw new UserError("The simulator only uses +999 numbers.");
@@ -226,6 +234,8 @@ export function startServer(options: ServerOptions): void {
           return json(response, 200, await app.privacyView(requireUser(request)));
         case "/api/fx":
           return json(response, 200, await nairaRates());
+        case "/api/feedback/summary":
+          return json(response, 200, summarize(app.options.db.allFeedback()));
         case "/api/demo-bank/statement": {
           const url = new URL(request.url ?? "/", "http://localhost");
           return json(response, 200, { entries: app.demoBankStatement(url.searchParams.get("account") ?? "") });
@@ -302,7 +312,7 @@ export function startServer(options: ServerOptions): void {
     work.catch((error: unknown) => {
       if (response.headersSent) return;
       if (error instanceof RateLimitError) return json(response, 429, { error: error.message });
-      if (error instanceof UserError) return json(response, 400, { error: error.message });
+      if (error instanceof UserError || error instanceof FeedbackError) return json(response, 400, { error: error.message });
       if (error instanceof SyntaxError) return json(response, 400, { error: "Invalid request." });
       log(`${request.method} ${path} failed: ${error instanceof Error ? error.stack ?? error.message : error}`);
       json(response, 500, { error: "Something went wrong on our side. Please try again." });
