@@ -7,6 +7,7 @@
   <meta name="description" content="Buy the S&P 500, gold or bitcoin by text message from any phone. Private on Canton; every trade needs 2 of 3 independent operators.">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/home.css">
 </head>
 <body>
   <header class="wrap top">
@@ -25,29 +26,72 @@
   </header>
 
   <main>
-    <section class="wrap hero">
-      <div class="hero-grid">
-        <div>
+    <section class="wrap hero" aria-labelledby="hero-title">
+      <div class="pl-hero">
+        <div class="pl-copy">
           <p class="eyebrow">Private on Canton</p>
-          <h1>Stocks and gold by text message.</h1>
+          <h1 id="hero-title">Stocks and gold by <span class="pl-mark">text message</span>.</h1>
           <p class="lede">Text <strong class="sms">BUY GOLD 20</strong> from any phone. No app, no mobile data. Your holdings stay private, and no single company can move your money: every trade needs 2 of 3 independent operators.</p>
           <div class="actions">
             <a class="btn" href="/try">Try it in your browser</a>
             <a class="btn secondary" href="/signup">Sign up</a>
           </div>
         </div>
-        <div class="card" aria-label="Example conversation">
-          <div class="demo-thread sms">
-            <div class="bubble out">BUY GOLD 20</div>
-            <div class="bubble in">Buy $20.00 of Gold at about $4,145.59/oz (0.00482 oz)? Reply YES and your PIN within 2 min to confirm, NO to cancel. Ref TEA5E</div>
-            <div class="bubble out">YES ****</div>
-            <div class="bubble in">Done: bought 0.00482 oz Gold for $20.00 at $4,145.59/oz. Cash $80.00. Ref TEA5E</div>
+
+        <div class="pl-stage" id="pl-stage">
+          <div class="pl-phone" role="img" aria-label="A phone showing an example text conversation: the user texts BUY GOLD 20, confirms with a PIN, and two of the three operators approve the trade.">
+            <div class="pl-screen">
+              <div class="pl-head">
+                <span class="pl-avatar" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 32 32"><path fill="var(--accent)" d="M6 4h20a4 4 0 0 1 4 4v12a4 4 0 0 1-4 4H14l-7 5v-5H6a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z"/><rect fill="var(--surface)" x="8" y="10" width="16" height="2.4" rx="1.2"/><rect fill="var(--surface)" x="8" y="15" width="10" height="2.4" rx="1.2"/></svg></span>
+                <div>
+                  <p class="pl-name">PrivateLine</p>
+                  <p class="pl-sub"><span class="pl-live" aria-hidden="true"></span>Example conversation</p>
+                </div>
+              </div>
+              <div class="pl-thread sms" id="pl-thread">
+                <div class="bubble out">BUY GOLD 20</div>
+                <div class="bubble in">Buy $20.00 of Gold at about $4,145.59/oz (0.00482 oz)? Reply YES and your PIN within 2 min to confirm, NO to cancel. Ref TEA5E</div>
+                <div class="bubble out">YES ••••</div>
+                <div class="bubble in">Done: bought 0.00482 oz Gold for $20.00 at $4,145.59/oz. Cash $80.00. Ref TEA5E</div>
+              </div>
+              <div class="pl-dock" aria-hidden="true">
+                <div class="pl-field sms" id="pl-typed"></div>
+                <div class="pl-send" id="pl-send"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></div>
+              </div>
+            </div>
+          </div>
+          <p class="pl-note small" id="pl-note">A typical approval takes about two seconds.</p>
+        </div>
+
+        <div class="pl-controls">
+          <div>
+            <p class="eyebrow" id="scenes-title">Watch it work</p>
+            <div class="pl-scenes" id="pl-scenes" role="group" aria-labelledby="scenes-title">
+              <button class="pl-toggle" id="pl-toggle" type="button" hidden>Pause</button>
+            </div>
+          </div>
+          <div class="card pl-ops" aria-hidden="true">
+            <div class="pl-ops-head"><strong>The vault's 3 operators</strong><span class="muted small">any 2 of 3 can approve</span></div>
+            <div class="pl-ops-row">
+              <div class="pl-op" data-op="sms" data-state="idle"><span class="pl-op-dot">1</span><span class="pl-op-name">SMS operator</span><span class="pl-op-state">ready</span></div>
+              <div class="pl-op" data-op="price" data-state="idle"><span class="pl-op-dot">2</span><span class="pl-op-name">Price checker</span><span class="pl-op-state">ready</span></div>
+              <div class="pl-op" data-op="risk" data-state="idle"><span class="pl-op-dot">3</span><span class="pl-op-name">Risk checker</span><span class="pl-op-state">ready</span></div>
+            </div>
+            <p class="pl-tally" id="pl-tally" data-tone="idle"><strong id="pl-tally-big">Ready</strong><span id="pl-tally-small">watching an example</span></p>
           </div>
         </div>
       </div>
+      <p class="sr-only" role="status" id="pl-status"></p>
     </section>
 
-    <section class="wrap section" aria-labelledby="prices-title">
+    <section class="wrap pl-stats reveal" aria-label="PrivateLine in numbers">
+      <div class="card pl-stat" role="group" aria-label="2 of 3 operators approve every money move"><strong><span data-to="2">2</span> of 3</strong><span>operators approve every money move</span></div>
+      <div class="card pl-stat" role="group" aria-label="About 3 seconds from your text to done"><strong>&asymp; <span data-to="3">3</span> s</strong><span>from your text to done</span></div>
+      <div class="card pl-stat" role="group" aria-label="1.5 percent, the most a price may drift from the real market"><strong><span data-to="1.5" data-decimals="1">1.5</span>%</strong><span>the most a price may drift from the real market</span></div>
+      <div class="card pl-stat" role="group" aria-label="0 phone numbers on the ledger"><strong>0</strong><span>phone numbers on the ledger</span></div>
+    </section>
+
+    <section class="wrap section reveal" aria-labelledby="prices-title">
       <div style="display:flex; justify-content:space-between; align-items:baseline; gap:12px; flex-wrap:wrap">
         <h2 id="prices-title">Prices, checked against the real market</h2>
         <span class="pill" id="price-mode">loading</span>
@@ -65,7 +109,7 @@
       </div>
     </section>
 
-    <section class="wrap section" aria-labelledby="how-title">
+    <section class="wrap section reveal" aria-labelledby="how-title">
       <div class="grid two">
         <div>
           <h2 id="how-title">How it works</h2>
@@ -87,7 +131,7 @@
       </div>
     </section>
 
-    <section class="wrap section" aria-labelledby="who-title">
+    <section class="wrap section reveal" aria-labelledby="who-title">
       <h2 id="who-title">Who can see your money</h2>
       <div class="card who">
         <div class="who-row"><strong>You</strong><span>Your balances and trades, on the ledger, under your own Canton party.</span></div>
@@ -107,5 +151,6 @@
   </footer>
 
   <script type="module" src="/static/page-home.js"></script>
+  <script type="module" src="/static/home-hero.js"></script>
 </body>
 </html>

@@ -1,5 +1,8 @@
 import { $, api, everyWhileVisible, h, pct, price } from "/static/app.js";
 
+let loaded = false;
+const lastSeen = new Map(); // symbol -> { ask, bid, market }, to flash what changed on a refresh
+
 async function loadPrices() {
   const body = $("#prices");
   try {
@@ -11,17 +14,22 @@ async function loadPrices() {
       }
       const gap = asset.market ? asset.mid / asset.market - 1 : null;
       const tone = gap === null ? "" : Math.abs(gap) > 0.015 ? "warn" : "good";
+      const before = lastSeen.get(asset.symbol);
+      const changed = (key) => (before && before[key] !== asset[key] ? " flash" : "");
+      lastSeen.set(asset.symbol, { ask: asset.ask, bid: asset.bid, market: asset.market });
       return h("tr", {},
         h("td", {}, h("strong", {}, asset.name), h("br"), h("span", { class: "muted small" }, `${asset.symbol}, per ${asset.unit}`)),
         h("td", { class: "sms" }, asset.alias),
-        h("td", { class: "r" }, price(asset.ask)),
-        h("td", { class: "r" }, price(asset.bid)),
-        h("td", { class: "r" }, asset.market ? price(asset.market) : "n/a"),
+        h("td", { class: `r${changed("ask")}` }, price(asset.ask)),
+        h("td", { class: `r${changed("bid")}` }, price(asset.bid)),
+        h("td", { class: `r${changed("market")}` }, asset.market ? price(asset.market) : "n/a"),
         h("td", { class: "r" }, gap === null ? "n/a" : h("span", { class: `pill ${tone}` }, pct(gap))),
       );
     }));
+    loaded = true;
   } catch (error) {
-    body.replaceChildren(h("tr", {}, h("td", { colspan: 6, class: "muted" }, `Prices are unavailable: ${error.message}`)));
+    // A failed refresh keeps the prices already on screen.
+    if (!loaded) body.replaceChildren(h("tr", {}, h("td", { colspan: 6, class: "muted" }, `Prices are unavailable: ${error.message}`)));
   }
 }
 
@@ -43,3 +51,4 @@ async function loadStatus() {
 loadPrices();
 loadStatus();
 everyWhileVisible(10000, loadStatus);
+everyWhileVisible(30000, loadPrices);
