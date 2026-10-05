@@ -12,7 +12,8 @@ import { Operator } from "./operator.ts";
 import { feedFromEnv } from "./prices.ts";
 import { paymentsWebhookSecret } from "./secrets.ts";
 import { startServer } from "./server.ts";
-import { RoutingGateway, SimulatorGateway, SmsGateGateway } from "./sms/gateway.ts";
+import { realNumberPolicy, RoutingGateway, SimulatorGateway, SmsGateGateway } from "./sms/gateway.ts";
+import { normalizeE164 } from "./sms/phone.ts";
 
 const log = (line: string) => console.log(`${new Date().toISOString().slice(11, 19)} ${line}`);
 
@@ -25,7 +26,7 @@ const onlySim = env.SMSGATE_SIM ? Number(env.SMSGATE_SIM) : undefined;
 const realGateway = env.SMSGATE_USERNAME && env.SMSGATE_PASSWORD
   ? new SmsGateGateway({ username: env.SMSGATE_USERNAME, password: env.SMSGATE_PASSWORD, ...(onlySim ? { simNumber: onlySim } : {}) })
   : undefined;
-const gateway = new RoutingGateway(simulator, realGateway);
+const gateway = new RoutingGateway(simulator, realGateway, realNumberPolicy(env.REAL_SMS_ALLOW, normalizeE164));
 
 const desk = new Desk({ ledger: ledgers.priceChecker, desk: deployment.desk, vault: deployment.vault, feed });
 const operator = new Operator({ deployment, decman: decman.operator, ledger: ledgers.operator, desk, log: (line) => log(`[operator] ${line}`) });

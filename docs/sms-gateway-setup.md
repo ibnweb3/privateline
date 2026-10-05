@@ -23,11 +23,32 @@ Put these in `app/.env`. Don't paste them into chat or commit them; `.env` is gi
 SMSGATE_USERNAME=<from the app>
 SMSGATE_PASSWORD=<from the app>
 SMSGATE_WEBHOOK_SECRET=<the signing key from step 1.5>
+REAL_SMS_ALLOW=<your own numbers, e.g. +2348031234567,+2348099999999>
 PUBLIC_URL=<https address from step 3>
 ```
 
+**`REAL_SMS_ALLOW` is a safety limit, and it is closed by default.** A public demo must never text a
+stranger, and without this limit anyone could type another person's number into the sign-up form
+and make your SIM text them. Real numbers can only sign up, be texted, or text us if they are
+listed here. Texts from any other number are ignored, with no reply, so they cost nothing. Everyone
+else uses the `+999` simulator. Set `REAL_SMS_ALLOW=open` only on your own private instance.
+
 On a dual-SIM phone, also set `SMSGATE_SIM=1` or `2`. PrivateLine then ignores texts that
 arrive on the other SIM, and sends from its own.
+
+## On the live server: one command
+
+Instead of editing `.env` by hand, run this in your own terminal, from the repo, after
+`deploy/upload.sh <ip>`:
+
+```
+deploy/set-smsgate.sh <server-ip>
+```
+
+It asks for the gateway login, the numbers allowed to use real SMS, and the SIM slot. It writes them
+to the server's `.env` over SSH (nothing goes on a command line or into a file on your laptop),
+restarts the app, registers the webhook, and prints the signing key to enter in the phone's app.
+The live site's address (`https://privateline.pages.dev`) is stable, so it needs no tunnel.
 
 ## 3. A public address for this machine
 

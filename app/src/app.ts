@@ -88,6 +88,7 @@ export class PrivateLine {
   readonly options: AppOptions;
   private readonly queues = new Map<string, Promise<void>>();
   private readonly strangerReplies = new Map<string, number>();
+  private readonly ignoredLogged = new Map<string, number>();
   private readonly policy = policyFromEnv();
   private privacyProbe: string | undefined;
 
@@ -109,6 +110,14 @@ export class PrivateLine {
 
   /** Handle one inbound text. Texts from the same user are processed one at a time, in order. */
   async receive(sms: InboundSms): Promise<void> {
+    // A number we would not text can't be a user. Ignoring it also means we never pay to reply.
+    if (!this.options.gateway.canText(sms.from)) {
+      if (Date.now() - (this.ignoredLogged.get(sms.from) ?? 0) > 3600_000) {
+        this.ignoredLogged.set(sms.from, Date.now());
+        this.log(`ignored a text from ${maskPhone(sms.from)}: not an approved number (REAL_SMS_ALLOW)`);
+      }
+      return;
+    }
     if (!this.db.firstSighting(sms.msgId)) return;
     const user = this.db.userByPhone(secrets.phoneLookup(sms.from));
     if (!user) return this.replyToStranger(sms.from);
@@ -540,15 +549,21 @@ export class PrivateLine {
     } catch {
       throw new UserError("That doesn't look like a phone number. Include the country code, e.g. +234 803 123 4567.");
     }
-    if (!isSimulatorPhone(e164) && !this.options.gateway.hasRealGateway) {
-      throw new UserError("This demo can only text simulator phones: use a +999 number and the phone on the Try it page.");
-    }
+    this.requireTextable(e164);
     const lookup = secrets.phoneLookup(e164);
     if (this.db.userByPhone(lookup)) throw new UserError("That phone number already has an account.");
     this.db.setSignupPhone(secrets.hashToken(token), secrets.encryptPhone(e164), lookup);
     const code = this.issueCode("signup-phone", lookup);
     await this.options.gateway.send(e164, `PrivateLine code: ${code}. It expires in 10 minutes. Never share it.`);
     return { phone: maskPhone(e164), simulator: isSimulatorPhone(e164) };
+  }
+
+  /** The demo only texts simulator phones and approved numbers, so it can never text a stranger. */
+  private requireTextable(e164: string): void {
+    if (this.options.gateway.canText(e164)) return;
+    throw new UserError(this.options.gateway.hasRealGateway
+      ? "During the demo, real texts go only to approved numbers. Use a +999 number and the phone on the Try it page."
+      : "This demo can only text simulator phones: use a +999 number and the phone on the Try it page.");
   }
 
   async verifySignupPhone(token: string, code: string): Promise<void> {
@@ -682,7 +697,7 @@ export class PrivateLine {
     } catch {
       throw new UserError("That doesn't look like a phone number.");
     }
-    if (!isSimulatorPhone(e164) && !this.options.gateway.hasRealGateway) throw new UserError("This demo can only text +999 simulator phones.");
+    this.requireTextable(e164);
     const lookup = secrets.phoneLookup(e164);
     if (lookup === user.phone_lookup) throw new UserError("That's already your phone number.");
     if (this.db.userByPhone(lookup)) throw new UserError("That phone number belongs to another account.");

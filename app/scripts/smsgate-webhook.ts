@@ -2,6 +2,7 @@
 // Reads SMSGATE_USERNAME / SMSGATE_PASSWORD (and PUBLIC_URL for register) from app/.env.
 //   npm run smsgate -- list
 //   npm run smsgate -- register            registers ${PUBLIC_URL}/sms/webhook for sms:received
+//   npm run smsgate -- add <id> <https url>    register any webhook, e.g. to put another service's back
 //   npm run smsgate -- delete <id>
 //   npm run smsgate -- send <+number> "text"   a test text from the gateway phone
 
@@ -39,6 +40,12 @@ switch (command) {
     console.log(`texts to the gateway phone now go to ${url}`);
     break;
   }
+  case "add": {
+    const [id, url] = args;
+    if (!id || !url?.startsWith("https://")) throw new Error("usage: add <webhook id> <https url>");
+    console.log(JSON.stringify(await call("POST", "/webhooks", { id, url, event: "sms:received" }), null, 2));
+    break;
+  }
   case "delete":
     if (!args[0]) throw new Error("usage: delete <webhook id>");
     await call("DELETE", `/webhooks/${encodeURIComponent(args[0])}`);
@@ -51,6 +58,6 @@ switch (command) {
     break;
   }
   default:
-    console.error("usage: npm run smsgate -- list | register | delete <id> | send <+number> \"text\"");
+    console.error("usage: npm run smsgate -- list | register | add <id> <https url> | delete <id> | send <+number> \"text\"");
     process.exit(1);
 }

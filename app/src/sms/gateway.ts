@@ -131,15 +131,26 @@ export function isSimulatorPhone(e164: string): boolean {
   return e164.startsWith(SIMULATOR_PREFIX);
 }
 
-/** Send +999 numbers to the simulator and every other number to the real gateway, if configured. */
+/**
+ * Which real numbers may be texted. A public demo must never text a stranger, so by default none
+ * can: real numbers need to be listed (REAL_SMS_ALLOW), or the limit lifted with "open".
+ */
+export type RealNumberPolicy = "open" | readonly string[];
+
+/**
+ * Send +999 numbers to the simulator, and approved real numbers to the real gateway, if configured.
+ * Nothing else is ever texted, and texts from other numbers are ignored.
+ */
 export class RoutingGateway implements SmsGateway {
   readonly name: string;
   readonly simulator: SimulatorGateway;
   private readonly real: SmsGateway | undefined;
+  private readonly allowed: RealNumberPolicy;
 
-  constructor(simulator: SimulatorGateway, real?: SmsGateway) {
+  constructor(simulator: SimulatorGateway, real?: SmsGateway, allowed: RealNumberPolicy = []) {
     this.simulator = simulator;
     this.real = real;
+    this.allowed = allowed;
     this.name = real ? `${real.name} + simulator` : "simulator only";
   }
 
@@ -147,9 +158,23 @@ export class RoutingGateway implements SmsGateway {
     return this.real !== undefined;
   }
 
+  /** Whether this number may be texted, and may text us. */
+  canText(e164: string): boolean {
+    if (isSimulatorPhone(e164)) return true;
+    return this.real !== undefined && (this.allowed === "open" || this.allowed.includes(e164));
+  }
+
   async send(to: string, body: string): Promise<void> {
     if (isSimulatorPhone(to)) return this.simulator.send(to, body);
     if (!this.real) throw new Error("no real SMS gateway is configured; only +999 simulator numbers work");
+    if (!this.canText(to)) throw new Error("that number is not approved for real texts");
     return this.real.send(to, body);
   }
+}
+
+/** Read REAL_SMS_ALLOW: "open", or a comma-separated list of numbers. Empty means none. */
+export function realNumberPolicy(value: string | undefined, normalize: (phone: string) => string): RealNumberPolicy {
+  const text = (value ?? "").trim();
+  if (text.toLowerCase() === "open") return "open";
+  return text === "" ? [] : text.split(",").map((part) => normalize(part.trim()));
 }

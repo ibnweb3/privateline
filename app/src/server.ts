@@ -14,7 +14,7 @@ import { nairaRates } from "./fx.ts";
 import { BadPaymentSignatureError, parsePaymentEvent } from "./payments.ts";
 import { ASSETS } from "./prices.ts";
 import { BadSignatureError, isSimulatorPhone, parseSmsGateWebhook, type SimulatorGateway } from "./sms/gateway.ts";
-import { normalizeE164 } from "./sms/phone.ts";
+import { maskPhone, normalizeE164 } from "./sms/phone.ts";
 
 export interface ServerOptions {
   app: PrivateLine;
@@ -259,9 +259,14 @@ export function startServer(options: ServerOptions): void {
         timestamp: request.headers["x-timestamp"] as string | undefined,
       }, options.webhookSecret, options.onlySim);
       json(response, 200, { ok: true });
-      if (sms) void app.receive(sms);
+      if (!sms) return log("sms webhook: ignored (not a received text, or it came in on another SIM)");
+      log(`sms webhook: text from ${maskPhone(sms.from)}`);
+      void app.receive(sms);
     } catch (error) {
-      if (error instanceof BadSignatureError) return json(response, 403, { error: "bad signature" });
+      if (error instanceof BadSignatureError) {
+        log("sms webhook: refused, the signature does not match the signing key on this server (check the key in the gateway app)");
+        return json(response, 403, { error: "bad signature" });
+      }
       throw error;
     }
   };
