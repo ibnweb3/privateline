@@ -232,9 +232,13 @@ project. PrivateLine runs its own gateway phone with a dedicated SIM. Setup is i
 [docs/sms-gateway-setup.md](docs/sms-gateway-setup.md):
 
 1. Install SMS Gateway for Android on the phone.
-2. Put its credentials in `app/.env`.
+2. Put its credentials in `app/.env`, and list your own numbers in `REAL_SMS_ALLOW`. Real SMS is
+   closed by default: only listed numbers can be texted, so a public demo can never text a stranger.
 3. Open a public tunnel to this machine.
 4. Run `npm run smsgate -- register`.
+
+On the live server, `deploy/set-smsgate.sh <ip>` does steps 2 to 4 without the credentials ever
+touching a file on your laptop.
 
 ## Layout
 
@@ -249,7 +253,7 @@ daml/privateline-test/   21 Daml Script tests (trades, limits, 2 of 3, privacy, 
 daml/dars/               BitSafe's governance DARs and the CIP-56 API DARs we build against
 app/src/                 service: ledger + DecMan clients, operator, checkers, desk, prices, SMS, web API
 app/web/                 website: home, try (phone simulator), demo bank, feedback, sign-up, sign-in, account, privacy
-app/test/                32 unit tests (commands, price rules, webhook signatures, crypto, funding, proxy, feedback)
+app/test/                44 unit tests (commands, price rules, webhook signatures, crypto, funding, proxy, feedback)
 app/scripts/             LocalNet setup and demo scripts
 scripts/dev/             Windows/WSL setup helpers
 ```
@@ -268,7 +272,7 @@ scripts/dev/             Windows/WSL setup helpers
   - phone-change cooldown and checker refusal;
   - deposit then withdraw keeps the books balanced, no withdrawing more than the balance, and the
     desk can't burn the vault's dollars.
-- **App:** `npm test` (32 unit tests) and `npm run check` (types).
+- **App:** `npm test` (44 unit tests) and `npm run check` (types).
 - **End to end, against a running app:**
   - `npm run e2e` signs up and texts a full conversation;
   - `node scripts/funding-e2e.ts` deposits naira from the demo bank and withdraws back to it;

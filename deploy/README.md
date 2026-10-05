@@ -125,6 +125,27 @@ redeploying when `front-door/` changes: `cd deploy/front-door && npx wrangler pa
 If the Daml package changed, also run `node scripts/localnet-setup.ts` before restarting. It
 distributes the new DAR through DecMan.
 
+## Disk space
+
+Canton logs at debug level, about 800 MB an hour, and Docker keeps every line unless told not to.
+On 2026-10-03 the `canton` container's log reached 47 GB, filled the 61 GB disk, and the ledger
+crashed: Postgres stopped mid-recovery, Canton could not restart, and trading and sign-up were down
+for about 14 hours while the website still loaded. `deploy/docker-logs.sh` (run by `server-setup.sh`)
+prevents it. It sets log rotation for new containers, and a cron job empties any container log over
+300 MB every 10 minutes, which protects the containers that already exist.
+
+If the disk ever fills anyway:
+
+```bash
+df -h /
+sudo du -xm --max-depth=2 /var/lib/docker | sort -rn | head      # what is big
+sudo truncate -s 0 "$(sudo docker inspect -f '{{.LogPath}}' canton)"
+sudo docker start postgres       # it recovers by itself once there is room
+sudo systemctl start privateline-localnet
+sudo docker restart splice       # if it stays "starting"
+sudo systemctl start privateline
+```
+
 ## Logs
 
 ```bash

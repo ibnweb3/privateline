@@ -411,3 +411,40 @@ evidence: an anonymous feedback form at `/feedback`, linked from the nav and fro
 - Checked on a 375 px phone width: no sideways scroll, 44-48 px tap targets, 16 px text so iOS
   doesn't zoom. Then through the public address: bad answers get a 400 with a plain message, a good
   one is stored, and I deleted my own test row so the table started empty.
+
+## The ledger went down for 14 hours — 2026-10-03/04 — and an animated home page
+
+**The outage.** Deploying the new home page failed with `scp: write remote: Failure`. That is a
+full disk, not a network problem. `df` said 61 GB used of 61 GB, and 47.7 GB of it was one file: the
+`canton` container's Docker log. Canton logs at debug level, about 800 MB an hour, and Docker's
+default is to keep every line. The disk filled around 20:00 UTC on Oct 3. Postgres died first, in
+the middle of replaying its write-ahead log ("No space left on device"). Then Canton crashed and
+could not restart. The website kept loading and the app process stayed up, so nothing looked wrong
+from outside, but every trade, sign-up and deposit would have failed.
+
+What I got wrong at first: Docker still showed Postgres as "Up (unhealthy)", but it was a stale
+flag. Its health check could not even run without disk space, and the container had actually exited.
+
+**The fix, in order.** Emptied the two oversized log files (no data touched). Started Postgres,
+which recovered by itself, and checked the ledger databases were intact (the sequencer is 469 MB,
+the participants 67 to 158 MB). Ran the LocalNet start-up service. Splice got stuck retrying its
+database, as it has after earlier restarts, and a `docker restart splice` cleared it. Then the
+app. A full test on the live site after the outage: sign-up, a deposit credited in 4.3 s, and a
+2-of-3 approved withdrawal in 4.3 s.
+
+**Prevention.** `deploy/docker-logs.sh`, now part of `server-setup.sh`: log rotation for new
+containers, and a cron job that empties any container log over 300 MB every 10 minutes. At
+Canton's rate that caps a log at a few hundred MB. A health check that only looks at the website
+would have missed this; the next improvement is an alert on disk usage and on the ledger itself.
+
+**The home page.** The home page now replays real conversations on a phone, in the style of the
+BinaText landing page, with a twist BinaText did not have: the three operators light up as they
+approve. Five examples can be picked or left to play: buy gold, add naira, a bad price refused, one
+node down, two nodes down. Each reply is word for word what the app sends, and a test enforces
+it. If a reply format changes, the test names the animated line that is now wrong. Numbers count up,
+sections fade in, and the price table refreshes with a flash when a price moves.
+
+It respects people who ask for less motion (they see a finished conversation and can still switch
+examples), pauses when the tab is hidden or off screen, has a Pause button, and every tap target is
+at least 44 px. Checked in a real browser at desktop and phone width, in light and dark, with
+reduced motion on, and against the live site.

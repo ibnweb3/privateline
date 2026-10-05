@@ -27,6 +27,9 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq ufw iptables >/dev/nu
 sudo systemctl enable --now docker
 sudo usermod -aG docker "$USER"
 
+say "Docker log limits (Canton's debug log once filled the disk and crashed the ledger)"
+bash "$REPO/deploy/docker-logs.sh"
+
 say "Firewall (before anything listens)"
 # Re-applied after every Docker start, since the DOCKER-USER rules don't survive a reboot.
 sudo tee /etc/systemd/system/privateline-firewall.service >/dev/null <<EOF
