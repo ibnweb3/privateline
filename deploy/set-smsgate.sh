@@ -31,9 +31,17 @@ allow="${allow// /}"
 [[ "$allow" =~ ^\+[0-9]{8,15}(,\+[0-9]{8,15})*$ ]] || { echo "List at least one number like +2348031234567, with the +. (Not the gateway's own number.)" >&2; exit 1; }
 [[ -z "$sim" || "$sim" =~ ^[12]$ ]] || { echo "SIM slot must be 1, 2, or empty." >&2; exit 1; }
 
-# A random signing key. No pipe into head: under pipefail that exits with status 141 and kills the script.
-if command -v openssl >/dev/null 2>&1; then secret=$(openssl rand -hex 12); else secret=$(od -An -N12 -tx1 /dev/urandom | tr -d ' \n'); fi
-[ "${#secret}" -eq 24 ] || { echo "Could not make a signing key." >&2; exit 1; }
+# A random signing key of 24 DIGITS. Digits, not hex: you have to enter it on a phone, and phone
+# keyboards autocapitalise the first letter and autocorrect, which silently changes a hex key (that
+# cost us an afternoon). od prints each 8 random bytes as a decimal number, so 16 bytes give about 38
+# digits; keep the first 24. No pipe into head: under pipefail that exits with status 141.
+secret=""
+for _ in 1 2 3 4 5; do
+  secret=$(od -An -N16 -tu8 /dev/urandom | tr -d ' \n' | cut -c1-24)
+  [[ "$secret" =~ ^[1-9][0-9]{23}$ ]] && break
+  secret=""
+done
+[ -n "$secret" ] || { echo "Could not make a signing key." >&2; exit 1; }
 
 echo "Answers look fine. Connecting to the server..." >&2
 printf '%s\n%s\n%s\n%s\n%s\n' "$username" "$password" "$secret" "$allow" "$sim" \
@@ -43,10 +51,13 @@ cat <<DONE
 
 Done. Two things left, on the gateway phone:
 
-1. In the SMS Gateway app, open the webhook settings and set the signing key to:
+1. In the SMS Gateway app (Settings > Webhooks > Signing Key), replace whatever is there with:
 
      $secret
 
-   (Type it exactly. The server already has it.)
-2. Then tell Claude "done". Don't text the phone before that.
+   It is 24 digits: no letters, no spaces, no quotes. The server already has it. Pasting beats
+   typing: send it to yourself on Telegram or WhatsApp, open that on the phone, copy, paste. Then
+   check the field shows exactly 24 digits.
+2. Then text HELP to the gateway SIM from your own number. If nothing comes back, the server log
+   says why: "sms webhook: refused" means the key in the app is not this one.
 DONE

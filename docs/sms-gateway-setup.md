@@ -13,7 +13,11 @@ user's PIN and 2 of 3 operators on the ledger; the phone only carries messages.
 3. Grant it SMS permission, and turn off battery optimization for it, so Android doesn't put it to
    sleep.
 4. In the app, turn on **Cloud server** and note the **username** and **password** it shows.
-5. In the app's webhook settings, set a **signing key**: any long random string.
+5. In the app (Settings > Webhooks > Signing Key), set a **signing key**: 24 random **digits**.
+   Use digits, not letters: phone keyboards autocapitalise the first letter and autocorrect, which
+   silently changes a hex or word key. Paste it, don't type it, and check the field shows exactly
+   what you meant. The app signs every webhook with it (HMAC-SHA256 over the body followed by the
+   timestamp, in the `x-signature` and `x-timestamp` headers), and PrivateLine checks that.
 
 ## 2. PrivateLine's settings
 
@@ -22,7 +26,7 @@ Put these in `app/.env`. Don't paste them into chat or commit them; `.env` is gi
 ```
 SMSGATE_USERNAME=<from the app>
 SMSGATE_PASSWORD=<from the app>
-SMSGATE_WEBHOOK_SECRET=<the signing key from step 1.5>
+SMSGATE_WEBHOOK_SECRET=<the signing key from step 1.5, with no quotes around it>
 REAL_SMS_ALLOW=<your own numbers, e.g. +2348031234567,+2348099999999>
 PUBLIC_URL=<https address from step 3>
 ```
@@ -75,14 +79,25 @@ npm run smsgate -- list        # check
 
 Then, from any phone:
 
-- Text `HELP` to the gateway SIM's number. You should get the command list back.
+- Text `HELP` to the gateway SIM's number from a number listed in `REAL_SMS_ALLOW`. If that number
+  has signed up, you get the command list back. If it hasn't, you get a short "this number isn't on
+  PrivateLine yet" reply (at most once an hour), which also proves the round trip works.
 - Sign up at `<PUBLIC_URL>/signup` with that phone's real number. The code arrives by SMS.
+
+The phone forwards **every** text the SIM receives, including operator messages from senders such as
+"MTN". PrivateLine ignores anything that is not from a phone number.
 
 Simulator numbers (`+999...`) keep working next to the real phone.
 
 ## When something doesn't arrive
 
 - `npm run smsgate -- send <+your number> "test"` checks that sending works.
-- The server log shows a `403 bad signature` if the signing key in `.env` doesn't match the app's.
+- The server log shows `sms webhook: refused, the signature does not match` if the signing key in
+  `.env` doesn't match the app's. Check, in this order: the key in the app is exactly the `.env`
+  value (no quotes, no spaces, same digits); you saved it in Settings > Webhooks > Signing Key and
+  not another field; then look at what the phone really sends. The app listens on plain HTTP on the
+  server's loopback, so `sudo tcpdump -i lo -A 'tcp port 8790'` shows the `x-signature` and
+  `x-timestamp` headers and the body, and you can recompute the HMAC-SHA256 yourself over the body
+  followed by the timestamp.
 - In the app, check the message log and the webhook delivery log. Most failures are the phone
   sleeping, or an old tunnel address.

@@ -14,13 +14,16 @@ ENV_FILE="${ENV_FILE:-$HOME/privateline/app/.env}"
 for value in "$username" "$password" "$secret" "$allow"; do
   [ -n "$value" ] || { echo "a required value is empty" >&2; exit 1; }
 done
+# The signing key is written WITHOUT quotes, so that copying the value from this file brings no quote
+# marks with it (a key pasted into the phone with quotes can never match). Letters and digits only.
+[[ "$secret" =~ ^[A-Za-z0-9]{16,64}$ ]] || { echo "the signing key must be 16 to 64 letters and digits" >&2; exit 1; }
 
 tmp=$(mktemp)
 grep -v -E '^(SMSGATE_|REAL_SMS_ALLOW=)' "$ENV_FILE" > "$tmp" || true
 {
   printf 'SMSGATE_USERNAME="%s"\n' "$username"
   printf 'SMSGATE_PASSWORD="%s"\n' "$password"
-  printf 'SMSGATE_WEBHOOK_SECRET="%s"\n' "$secret"
+  printf 'SMSGATE_WEBHOOK_SECRET=%s\n' "$secret"
   printf 'REAL_SMS_ALLOW="%s"\n' "$allow"
   if [ -n "$sim" ]; then printf 'SMSGATE_SIM=%s\n' "$sim"; fi
 } >> "$tmp"

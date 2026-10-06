@@ -448,3 +448,51 @@ It respects people who ask for less motion (they see a finished conversation and
 examples), pauses when the tab is hidden or off screen, has a Pause button, and every tap target is
 at least 44 px. Checked in a real browser at desktop and phone width, in light and dark, with
 reduced motion on, and against the live site.
+
+## Real SMS, both ways — 2026-10-06
+
+**Result.** A text from a real phone to the gateway SIM now reaches PrivateLine and gets a reply.
+Until today only the other direction was proven (PrivateLine texting a real number, which had
+worked earlier). The first accepted inbound text arrived at 06:40:24 UTC.
+
+**What was wrong, and the main part was ours.** From 3 October 19:07 to 6 October 06:38 UTC (the log
+starts on the 3rd) the server refused 492 webhooks with "the signature does not match". A handful
+were my own deliberate tests; the rest were the gateway phone. The phone signs each webhook with
+HMAC-SHA256 over the body followed by the timestamp. The check we had ported from BinaText did it
+the other way round (timestamp, then body), and its comment said that was "confirmed against a real
+capture". It was not. Fixed to accept the real order, with the old order still accepted, and two
+new tests (46 pass).
+
+It hid behind a second possible problem, the key in the phone, and I cannot say how much of the
+3 days that explains. The key was changed twice. After the second change the capture showed every
+webhook matching the server's key exactly, in the body-then-timestamp order. Whether the first key
+the user entered was also right is unknown: my first analyzer only tried the wrong order, and that
+key is gone.
+
+**How it was found, because two plausible guesses were wrong first.**
+
+- *First guess: a copy mistake.* The key line on the server is wrapped in quotes, and the quotes are
+  not part of the key. They are easy to paste into the phone by accident. I rotated the key to rule it out.
+- *Second guess: the key on the phone.* The gateway's cloud API returns no device settings, so the
+  phone's key could not be read. Instead I captured the webhooks on the server with `tcpdump` on the
+  loopback port (the app is behind Caddy, so the traffic there is plain HTTP) and wrote a small
+  analyzer that tests each captured signature against the server's key and the usual mistakes
+  (quotes, spaces, capitals, key as raw bytes, either order of body and timestamp). It prints only
+  what matched, never a key or a message. I first checked it on webhooks I signed myself, one
+  correct and one with a quoted key, and it told them apart.
+- *Result:* with the first analyzer nothing matched, but it only knew timestamp-first orders. I added
+  body-first and the other variants, and re-ran it on the webhooks captured after the key was
+  changed to a fresh one: every one of them matched exactly, in the order body then timestamp.
+
+**Smaller lessons, kept in the setup helper and docs.**
+
+- The signing key is now **24 digits**, not hex. A key has to be entered on a phone, and phone
+  keyboards autocapitalise the first letter and autocorrect, which can silently change letters.
+- The server's `.env` now holds the key **without quotes**, so copying the value brings no quote marks.
+- The phone forwards every text the SIM receives, including operator messages ("MTN ..."). They are
+  ignored because the sender is not a phone number.
+- A user texting from a number that has not signed up gets "this number isn't on PrivateLine yet",
+  once an hour. An earlier version of the docs wrongly said `HELP` returns the command list for any
+  number.
+
+**Still not proven.** Only one real phone (the builder's) has used it. No outside user has.
