@@ -1,7 +1,9 @@
 // SMS in and out. Two gateways:
 //   - sms-gate.app (SMS Gateway for Android): an Android phone with any SIM relays texts. Ported
-//     from BinaText's src/sms/smsgate.ts. The webhook is signed with HMAC-SHA256 over
-//     `${x-timestamp}${rawBody}` (hex in x-signature), confirmed against a real capture.
+//     from BinaText's src/sms/smsgate.ts. The webhook is signed with HMAC-SHA256 (hex in x-signature)
+//     over `${rawBody}${x-timestamp}`: the body first, then the timestamp. That order was read off real
+//     webhooks from the gateway app on 2026-10-06 (the port from BinaText had them the other way
+//     round, and every text was refused). The older order is still accepted.
 //   - the simulator: a phone on the PrivateLine website, so the demo runs without a real phone.
 
 import { createHmac, timingSafeEqual } from "node:crypto";
@@ -45,9 +47,13 @@ interface SmsGateWebhook {
 export function parseSmsGateWebhook(raw: string, headers: { signature?: string; timestamp?: string },
   secret: string | undefined, onlySim?: number): InboundSms | null {
   if (secret) {
-    const expected = createHmac("sha256", secret).update(`${headers.timestamp ?? ""}${raw}`).digest("hex");
+    const timestamp = headers.timestamp ?? "";
     const given = (headers.signature ?? "").trim().toLowerCase().replace(/^sha256=/, "");
-    if (given.length !== expected.length || !timingSafeEqual(Buffer.from(given), Buffer.from(expected))) {
+    const matches = (message: string): boolean => {
+      const expected = createHmac("sha256", secret).update(message).digest("hex");
+      return given.length === expected.length && timingSafeEqual(Buffer.from(given), Buffer.from(expected));
+    };
+    if (!matches(`${raw}${timestamp}`) && !matches(`${timestamp}${raw}`)) {
       throw new BadSignatureError("sms-gate webhook signature mismatch");
     }
   }
